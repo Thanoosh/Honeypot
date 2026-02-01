@@ -1,0 +1,13 @@
+docker
+flask
+streamlit
+scikit-learn
+numpy
+pandas
+pyyaml
+rich
+paramiko
+scipy
+sentence-transformers
+transformers
+torch
