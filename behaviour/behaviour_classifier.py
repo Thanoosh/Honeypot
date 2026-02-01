@@ -1,52 +1,101 @@
-# behaviour/behaviour_classifier.py
+import time
+from collections import defaultdict
+from typing import Dict, Any
+from behaviour.response_engine import ResponseEngine
 
-import numpy as np
-from ml.embedding_model import EmbeddingModel
-from ml.feature_extractor import FeatureExtractor
-from ml.behaviour_model import BehaviourModel
-from ml.attack_intent_classifier import AttackIntentClassifier
 
 class BehaviourClassifier:
+    NEW = "NEW"
+    PROBING = "PROBING"
+    SUSPICIOUS = "SUSPICIOUS"
+    MALICIOUS = "MALICIOUS"
+    CONFIRMED_ATTACK = "CONFIRMED_ATTACK"
+
     def __init__(self):
-        self.embedder = EmbeddingModel()
-        self.extractor = FeatureExtractor()
-        self.intent_classifier = AttackIntentClassifier()
+        self.attackers = defaultdict(self._init_attacker)
+        self.response_engine = ResponseEngine()
 
-        self.models = {}
-        self.last_time = {}
+    def _init_attacker(self):
+        return {
+            "state": self.NEW,
+            "events": 0,
+            "malicious_events": 0,
+            "services": set(),
+            "risk": 0.0,
+            "first_seen": time.time(),
+            "last_seen": time.time(),
+        }
 
-    def process_event(self, event):
-        details = event.get("details", {})
-        client_ip = details.get("client_ip", "unknown")
-        text = str(details)
+    def process_event(self, event: Dict[str, Any]) -> Dict[str, Any]:
+        ip = self._extract_ip(event)
+        attacker = self.attackers[ip]
 
-        if client_ip not in self.models:
-            self.models[client_ip] = BehaviourModel()
-            self.last_time[client_ip] = None
+        attacker["events"] += 1
+        attacker["last_seen"] = time.time()
 
-        # -------- Attack Intent (Zero-shot NLP) --------
-        intent = self.intent_classifier.classify(text)
+        service = event.get("event_type", "").split("_")[0]
+        attacker["services"].add(service)
 
-        # -------- Behaviour ML --------
-        embedding = self.embedder.embed(text)
-        features = self.extractor.extract(text, self.last_time[client_ip])
-        self.last_time[client_ip] = features["timestamp"]
+        attack_type = event.get("attack_type", "BENIGN")
+        confidence = float(event.get("confidence", 0.0))
+        entropy = float(event.get("details", {}).get("entropy", 0.0))
 
-        numeric = np.array([
-            features["length"],
-            features["entropy"],
-            features["interval"]
-        ])
+        # ---------------- RISK SCORING ----------------
+        if attack_type != "BENIGN":
+            attacker["malicious_events"] += 1
+            attacker["risk"] += 2
 
-        vector = np.concatenate([embedding[:10], numeric])
+        attacker["risk"] += entropy
+        attacker["risk"] += attacker["malicious_events"] * 1.5
 
-        model = self.models[client_ip]
-        model.add_sample(vector)
-        behaviour = model.predict(vector)
+        if len(attacker["services"]) > 1:
+            attacker["risk"] += 2  # HTTP ↔ SSH pivot
+
+        prev_state = attacker["state"]
+        new_state, reasons = self._transition(attacker)
+        attacker["state"] = new_state
+
+        response = self.response_engine.decide(
+            behaviour=new_state,
+            attack_type=attack_type,
+            confidence=confidence,
+        )
 
         return {
-            "behaviour": behaviour,
-            "attack_type": intent["attack_type"],
-            "confidence": intent["confidence"],
-            "features": features
+            "behaviour": new_state,
+            "attack_type": attack_type,
+            "confidence": confidence,
+            "risk_score": round(attacker["risk"], 2),
+            "response": response,
+            "state_transition": {
+                "from": prev_state,
+                "to": new_state,
+                "reasons": reasons,
+            },
         }
+
+    # ---------------- STATE TRANSITION ----------------
+
+    def _transition(self, attacker):
+        reasons = []
+
+        if attacker["events"] >= 2 and attacker["state"] == self.NEW:
+            reasons.append("multiple interactions")
+            return self.PROBING, reasons
+
+        if attacker["malicious_events"] >= 1:
+            reasons.append("malicious event detected")
+            return self.SUSPICIOUS, reasons
+
+        if attacker["malicious_events"] >= 3 or attacker["risk"] > 6:
+            reasons.append("repeated malicious behaviour")
+            return self.MALICIOUS, reasons
+
+        if attacker["risk"] > 10 and attacker["events"] > 5:
+            reasons.append("persistent high-risk attacker")
+            return self.CONFIRMED_ATTACK, reasons
+
+        return attacker["state"], ["no escalation"]
+
+    def _extract_ip(self, event):
+        return event.get("details", {}).get("client_ip") or "UNKNOWN"

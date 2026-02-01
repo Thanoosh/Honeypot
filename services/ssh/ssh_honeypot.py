@@ -1,5 +1,3 @@
-# services/ssh/ssh_honeypot.py
-
 import socket
 import threading
 import paramiko
@@ -9,8 +7,6 @@ import requests
 HOST_KEY = paramiko.RSAKey.generate(2048)
 CORE_EVENT_ENDPOINT = "http://host.docker.internal:5001/event"
 SSH_PORT = 2222
-
-# ---------------- FAKE SYSTEM ----------------
 
 FAKE_USERS = {
     "root": "/root",
@@ -24,11 +20,7 @@ FAKE_FS = {
     "/home/admin": ["notes.txt", "backup.sh"],
     "/home/test": ["readme.txt"],
     "/root": ["flag.txt"],
-    "/etc": ["passwd", "shadow"],
-    "/var": ["log"],
 }
-
-# ---------------- HELPERS ----------------
 
 def send_event(event_type, details):
     try:
@@ -40,13 +32,6 @@ def send_event(event_type, details):
     except Exception:
         pass
 
-def normalize_path(path):
-    if path == "/":
-        return "/"
-    return path.rstrip("/")
-
-# ---------------- SSH SERVER ----------------
-
 class HoneypotSSHServer(paramiko.ServerInterface):
     def __init__(self, client_ip):
         self.client_ip = client_ip
@@ -54,14 +39,11 @@ class HoneypotSSHServer(paramiko.ServerInterface):
 
     def check_auth_password(self, username, password):
         self.username = username
-        send_event(
-            "SSH_LOGIN_ATTEMPT",
-            {
-                "username": username,
-                "password": password,
-                "client_ip": self.client_ip
-            }
-        )
+        send_event("SSH_LOGIN_ATTEMPT", {
+            "username": username,
+            "password": password,
+            "client_ip": self.client_ip
+        })
         return paramiko.AUTH_SUCCESSFUL
 
     def get_allowed_auths(self, username):
@@ -73,11 +55,9 @@ class HoneypotSSHServer(paramiko.ServerInterface):
     def check_channel_shell_request(self, channel):
         return True
 
-    # 🔥 REQUIRED FOR INTERACTIVE SHELL
-    def check_channel_pty_request(self, channel, term, width, height, pw, ph, modes):
+    def check_channel_pty_request(self, channel, *args):
         return True
 
-# ---------------- CLIENT HANDLER ----------------
 
 def handle_client(client, addr):
     transport = paramiko.Transport(client)
@@ -93,82 +73,33 @@ def handle_client(client, addr):
     user = server.username if server.username in FAKE_USERS else "test"
     cwd = FAKE_USERS.get(user, "/home/test")
 
-    chan.send(b"Welcome to Ubuntu 20.04.6 LTS\r\n")
-    chan.send(b"Last login: Thu Jan 31 12:00:00 2026\r\n")
-
-    buffer = ""
+    chan.send(b"Ubuntu 20.04.6 LTS\r\n")
 
     while True:
         try:
-            prompt = f"{user}@honeypot:{cwd}$ "
-            chan.send(prompt.encode())
+            chan.send(f"{user}@honeypot:{cwd}$ ".encode())
+            cmd = chan.recv(1024).decode().strip()
 
-            buffer = ""
-
-            while True:
-                char = chan.recv(1).decode("utf-8", errors="ignore")
-
-                if char in ("\r", "\n"):
-                    chan.send(b"\r\n")
-                    break
-
-                elif char == "\x7f":  # Backspace
-                    if buffer:
-                        buffer = buffer[:-1]
-                        chan.send(b"\b \b")
-                else:
-                    buffer += char
-                    chan.send(char.encode())
-
-            command = buffer.strip()
-            if not command:
+            if not cmd:
                 continue
 
-            send_event(
-                "SSH_COMMAND",
-                {"command": command, "client_ip": addr[0]}
-            )
+            send_event("SSH_COMMAND", {
+                "command": cmd,
+                "client_ip": addr[0]
+            })
 
-            # -------- COMMAND HANDLING --------
-
-            if command in ("exit", "logout"):
+            if cmd in ("exit", "logout"):
                 break
-
-            elif command == "pwd":
+            elif cmd == "ls":
+                chan.send(("  ".join(FAKE_FS.get(cwd, [])) + "\r\n").encode())
+            elif cmd == "pwd":
                 chan.send((cwd + "\r\n").encode())
-
-            elif command == "whoami":
+            elif cmd == "whoami":
                 chan.send((user + "\r\n").encode())
-
-            elif command == "ls":
-                files = FAKE_FS.get(cwd, [])
-                chan.send(("  ".join(files) + "\r\n").encode())
-
-            elif command.startswith("cd"):
-                parts = command.split(maxsplit=1)
-                target = parts[1] if len(parts) > 1 else FAKE_USERS[user]
-
-                if target == "..":
-                    cwd = "/" if cwd.count("/") <= 1 else "/".join(cwd.split("/")[:-1])
-                else:
-                    new_path = normalize_path(
-                        target if target.startswith("/") else f"{cwd}/{target}"
-                    )
-                    if new_path in FAKE_FS:
-                        cwd = new_path
-                    else:
-                        chan.send(b"No such file or directory\r\n")
-
-            elif command == "id":
-                chan.send(f"uid=1000({user}) gid=1000({user}) groups=1000({user})\r\n".encode())
-
-            elif command.startswith("cat"):
-                chan.send(b"Permission denied\r\n")
-
             else:
-                chan.send((command + ": command not found\r\n").encode())
+                chan.send(b"command not found\r\n")
 
-            time.sleep(0.3)
+            time.sleep(0.2)
 
         except Exception:
             break
@@ -176,21 +107,17 @@ def handle_client(client, addr):
     chan.close()
     transport.close()
 
-# ---------------- MAIN ----------------
 
 def start_ssh_honeypot():
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    sock = socket.socket()
     sock.bind(("0.0.0.0", SSH_PORT))
     sock.listen(100)
     print(f"[SSH] Honeypot listening on port {SSH_PORT}")
 
     while True:
         client, addr = sock.accept()
-        threading.Thread(
-            target=handle_client,
-            args=(client, addr),
-            daemon=True
-        ).start()
+        threading.Thread(target=handle_client, args=(client, addr), daemon=True).start()
+
 
 if __name__ == "__main__":
     start_ssh_honeypot()

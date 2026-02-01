@@ -1,63 +1,73 @@
 # ml/attack_intent_classifier.py
 
 from transformers import pipeline
-import threading
-import os
+from typing import Dict
 
 
 class AttackIntentClassifier:
-    def __init__(self):
-        self._classifier = None
-        self._lock = threading.Lock()
+    """
+    Zero-shot ML classifier with security-aware normalization.
+    """
 
-        # Path to OFFLINE model directory
-        self.model_path = os.path.join(
-            os.getcwd(),
-            "models",
-            "bart-large-mnli"
+    def __init__(self):
+        self.classifier = pipeline(
+            task="zero-shot-classification",
+            model="facebook/bart-large-mnli",
         )
 
+        # Canonical security labels
         self.labels = [
-            "SQL injection attack",
-            "Cross-site scripting attack",
-            "Command injection attack",
-            "Path traversal attack",
-            "Brute force login attempt",
-            "Reconnaissance activity",
-            "Benign user activity"
+            "SQL Injection",
+            "Command Injection",
+            "Path Traversal",
+            "Brute Force",
+            "Credential Access",
+            "Reconnaissance",
+            "Benign",
         ]
 
-    def _load_model(self):
-        # Load model strictly from local files
-        self._classifier = pipeline(
-            "zero-shot-classification",
-            model=self.model_path,
-            local_files_only=True
-        )
+    def classify(self, text: str) -> Dict[str, float]:
+        if not text or not text.strip():
+            return {"attack_type": "BENIGN", "confidence": 0.0}
 
-    def classify(self, text: str):
-        if not text or not isinstance(text, str):
-            return {"attack_type": "UNKNOWN", "confidence": 0.0}
-
-        # Lazy-load model on first use
-        if self._classifier is None:
-            with self._lock:
-                if self._classifier is None:
-                    try:
-                        print("[ML] Loading offline BART MNLI model...")
-                        self._load_model()
-                        print("[ML] Offline BART model loaded successfully")
-                    except Exception as e:
-                        print(f"[ML] Failed to load offline intent model: {e}")
-                        return {"attack_type": "UNKNOWN", "confidence": 0.0}
-
-        result = self._classifier(
+        result = self.classifier(
             text,
-            self.labels,
-            multi_label=False
+            candidate_labels=self.labels,
+            multi_label=False,
         )
+
+        raw_label = result["labels"][0]
+        confidence = float(result["scores"][0])
+
+        # 🔑 SECURITY NORMALIZATION
+        attack_type = self._normalize_label(raw_label, text)
 
         return {
-            "attack_type": result["labels"][0],
-            "confidence": float(result["scores"][0])
+            "attack_type": attack_type,
+            "confidence": confidence,
         }
+
+    def _normalize_label(self, label: str, text: str) -> str:
+        """
+        Maps semantic intent to canonical attack classes.
+        """
+
+        t = text.lower()
+
+        # SQL Injection patterns
+        if any(x in t for x in ["or 1=1", "union select", "--", "' or '"]):
+            return "SQL Injection"
+
+        # Command Injection
+        if any(x in t for x in ["; ls", "&&", "| cat", "`id`"]):
+            return "Command Injection"
+
+        # Path Traversal
+        if "../" in t or "..\\" in t:
+            return "Path Traversal"
+
+        # Brute force / credential stuffing
+        if "login" in t and label == "Credential Access":
+            return "Brute Force"
+
+        return label

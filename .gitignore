@@ -1,3 +1,38 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.venv/
+venv/
+
+# Logs & runtime data
+data/logs/
+data/pcaps/
+data/snapshots/
+
+# ML artifacts (generated)
+data/ml/*.joblib
+ml/__pycache__/
+models/*/.cache/
+
+# HuggingFace cache
+.cache/
+hf_cache/
+
+# OS / Editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Secrets
+.env
+.env.*
+
+# Docker runtime
+*.pid
+
 # Virtual environments
 .venv/
 venv/

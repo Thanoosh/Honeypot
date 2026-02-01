@@ -7,6 +7,12 @@ import time
 
 app = Flask(__name__)
 
+# ---------------- SERVICE MODE ----------------
+
+SERVICE_MODE = "NORMAL"
+
+# ---------------- SQLi DETECTION ----------------
+
 SQLI_PATTERNS = [
     r"(?i)union\s+select",
     r"(?i)or\s+1=1",
@@ -15,20 +21,23 @@ SQLI_PATTERNS = [
     r"(?i)sleep\(",
 ]
 
-# 🔥 CORE API (host machine)
+# ---------------- CORE API ----------------
+
 CORE_EVENT_ENDPOINT = "http://host.docker.internal:5001/event"
 
 
 def detect_sqli(payload: str) -> bool:
-    for pattern in SQLI_PATTERNS:
-        if re.search(pattern, payload):
-            return True
-    return False
+    return any(re.search(p, payload) for p in SQLI_PATTERNS)
 
 
-def send_event(event_type: str, details: dict) -> str:
+# ---------------- CORE COMMUNICATION ----------------
+
+def send_event(event_type: str, details: dict) -> dict:
+    """
+    Sends event to core and returns full decision payload.
+    """
     try:
-        response = requests.post(
+        resp = requests.post(
             CORE_EVENT_ENDPOINT,
             json={
                 "event_type": event_type,
@@ -36,20 +45,33 @@ def send_event(event_type: str, details: dict) -> str:
             },
             timeout=5
         )
-        if response.ok:
-            return response.json().get("behaviour", "UNKNOWN")
+        if resp.ok:
+            return resp.json()
     except Exception:
         pass
 
-    return "UNKNOWN"
+    return {}
 
 
-def adapt_response(behaviour: str):
-    if behaviour == "AUTOMATED_ATTACK":
-        time.sleep(2)
-    elif behaviour == "PERSISTENT_ATTACKER":
-        time.sleep(4)
+def adapt_response(core_decision: dict):
+    """
+    Applies response decision from core.
+    """
+    global SERVICE_MODE
 
+    if not core_decision:
+        return
+
+    response = core_decision.get("response", {})
+
+    SERVICE_MODE = response.get("service_mode", "NORMAL")
+    delay = response.get("delay", 0)
+
+    if delay > 0:
+        time.sleep(delay)
+
+
+# ---------------- ROUTES ----------------
 
 @app.route("/")
 def index():
@@ -62,29 +84,41 @@ def login():
     password = request.args.get("password", "")
     combined = f"{username} {password}"
 
+    # ---------- SQLi PATH ----------
     if detect_sqli(combined):
-        behaviour = send_event(
+        core_decision = send_event(
             "HTTP_SQLI_ATTEMPT",
             {
                 "endpoint": "/login",
                 "payload": combined,
-                "client_ip": request.remote_addr
-            }
+                "client_ip": request.remote_addr,
+            },
         )
 
-        adapt_response(behaviour)
+        adapt_response(core_decision)
 
+        # ---------- DECEPTION ----------
+        if SERVICE_MODE == "FAKE_DB":
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": "SQL syntax error near 'LIMIT 1'",
+                }
+            ), 500
+
+        # ---------- NORMAL ERROR ----------
         return jsonify(
             {
                 "status": "error",
-                "message": "Database error occurred"
+                "message": "Database error occurred",
             }
         ), 500
 
+    # ---------- NORMAL LOGIN ----------
     return jsonify(
         {
             "status": "success",
-            "message": "Invalid credentials"
+            "message": "Invalid credentials",
         }
     )
 
