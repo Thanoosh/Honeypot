@@ -1,8 +1,8 @@
 # services/ssh/ssh_honeypot.py
 #
 # Behaviour-Aware SSH Honeypot
-# Real SSH protocol, fake shell, rich filesystem with Easter eggs
-# Every interaction is logged to the Core API for behaviour analysis
+# Real SSH protocol, fake shell, rich filesystem with Easter eggs.
+# Every interaction is logged to the Core API for behaviour analysis.
 
 import socket
 import threading
@@ -16,7 +16,12 @@ import os
 # CONFIG
 # ─────────────────────────────────────────────
 
-CORE_EVENT_ENDPOINT = "http://host.docker.internal:5001/event"
+# Uses Docker service name so honeypot can reach core on the Docker network.
+# Falls back to host.docker.internal for local dev.
+CORE_EVENT_ENDPOINT = os.environ.get(
+    "CORE_API", "http://host.docker.internal:5001"
+) + "/event"
+
 SSH_PORT = 2222
 
 # Believable hostname — does NOT say "honeypot"
@@ -25,12 +30,16 @@ HOSTNAME = "prod-web-01"
 # ─────────────────────────────────────────────
 # PERSISTENT HOST KEY
 # Saved to disk so the fingerprint stays the same
-# across container restarts — no more scary warnings
+# across container restarts — no more scary SSH warnings.
 # ─────────────────────────────────────────────
 
-# Kill chain password — must match LEAKED_SSH_PASS in services/http/app.py
+# KEY_PATH must be defined BEFORE load_or_generate_host_key is called
+KEY_PATH = "/app/data/ssh_host_rsa_key"
+
+# Kill chain credentials — must match LEAKED_SSH_PASS in services/http/app.py
 KILL_CHAIN_PASSWORD = "Adm1n#2024"
 KILL_CHAIN_USER = "admin"
+
 
 def load_or_generate_host_key(path: str) -> paramiko.RSAKey:
     """Load existing host key or generate and save a new one."""
@@ -45,6 +54,7 @@ def load_or_generate_host_key(path: str) -> paramiko.RSAKey:
     key.write_private_key_file(path)
     return key
 
+
 HOST_KEY = load_or_generate_host_key(KEY_PATH)
 
 # ─────────────────────────────────────────────
@@ -53,16 +63,15 @@ HOST_KEY = load_or_generate_host_key(KEY_PATH)
 # ─────────────────────────────────────────────
 
 FAKE_USERS = {
-    "root":    "/root",
-    "admin":   "/home/admin",
-    "ubuntu":  "/home/ubuntu",
-    "deploy":  "/home/deploy",
-    "test":    "/home/test",
+    "root":   "/root",
+    "admin":  "/home/admin",
+    "ubuntu": "/home/ubuntu",
+    "deploy": "/home/deploy",
+    "test":   "/home/test",
 }
 
 # ─────────────────────────────────────────────
 # FAKE FILESYSTEM
-# Directory structure with file listings
 # ─────────────────────────────────────────────
 
 FAKE_FS = {
@@ -92,13 +101,9 @@ FAKE_FS = {
 
 # ─────────────────────────────────────────────
 # FAKE FILE CONTENTS
-# Easter eggs — keep attacker engaged and log high-value interactions
 # ─────────────────────────────────────────────
 
 FAKE_FILE_CONTENTS = {
-
-    # ── ROOT EASTER EGGS ──────────────────────
-
     "/root/secret/credentials.txt": """\
 # Internal Service Credentials
 # Last updated: 2024-11-03 by admin
@@ -154,9 +159,6 @@ INSERT INTO users VALUES (2,'john.doe','john@company.internal','$2b$12$EixZaYVK1
 INSERT INTO users VALUES (3,'deploy','deploy@company.internal','$2b$12$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lHwy','deploy','2023-06-01 08:00:00');
 """,
 
-    # ── ROOT BASH HISTORY ─────────────────────
-    # Gives attacker breadcrumbs to follow
-
     "/root/.bash_history": """\
 ls -la /root/secret
 cat /root/secret/credentials.txt
@@ -168,8 +170,6 @@ aws s3 cp /root/secret/db_backup.sql s3://company-backups/prod/
 systemctl status nginx
 tail -f /var/log/auth.log
 """,
-
-    # ── ADMIN HOME ────────────────────────────
 
     "/home/admin/notes.txt": """\
 TODO:
@@ -232,8 +232,6 @@ tail -100 /var/log/auth.log
 ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC3vJ8pLmNk7xQzF9R2wT4yHuG6dK1oP5sM0eN3aB8cV7iL2jW9qE4tY6mX0rZ5fD1gS3hA2kN8pQ7vR4uI6lO9yT1wE5jM0bK3xC7dF2gH4nP8qS1tV6rY9iL0oM3eN5aB2cW7jK4pQ8uR1vT6xZ0fD3gH5nS2tY7mX1wE4jM9bK6xC0dF2gH3nP7qS4tV8rY1iL2oM5eN9aB6cW0jK7pQ4uR3vT8xZ2fD7gH1nS6tY0mX3wE8jM2bK9xC4dF6gH7nP0qS3tV2rY5iL4oM7eN1aB8cW3jK0pQ6uR9vT4xZ6fD1gH3nS8tY2mX7wE0jM4bK1xC8dF4gH9nP2qS7tV0rY3iL6oM9eN3aB0cW5jK2pQ8uR1vT6xZ4fD9gH7nS0tY4mX1wE2 admin@workstation
 """,
 
-    # ── UBUNTU APP ────────────────────────────
-
     "/home/ubuntu/app/settings.json": """\
 {
   "environment": "production",
@@ -260,8 +258,6 @@ DATABASE_URL = os.environ.get(
 SECRET_KEY = os.environ.get("APP_SECRET_KEY", "s3cr3t_k3y_ch@ng3_m3_pl3as3")
 DEBUG = False
 """,
-
-    # ── SYSTEM FILES ──────────────────────────
 
     "/etc/passwd": """\
 root:x:0:0:root:/root:/bin/bash
@@ -330,7 +326,6 @@ cache size      : 30720 KB
 
 # ─────────────────────────────────────────────
 # HIGH VALUE FILES
-# Reading these triggers a high-confidence alert
 # ─────────────────────────────────────────────
 
 HIGH_VALUE_FILES = {
@@ -348,7 +343,7 @@ HIGH_VALUE_FILES = {
 }
 
 # ─────────────────────────────────────────────
-# MOTD — shown after login
+# MOTD
 # ─────────────────────────────────────────────
 
 MOTD = (
@@ -374,11 +369,11 @@ MOTD = (
 # ─────────────────────────────────────────────
 
 def send_event(event_type: str, details: dict, high_value: bool = False):
-    """Send event to core API. high_value=True boosts confidence scoring."""
+    """Send event to core API. Silent failure — never crashes the honeypot."""
     try:
         payload = {
             "event_type": event_type,
-            "details": {**details, "high_value": high_value}
+            "details": {**details, "high_value": high_value},
         }
         requests.post(CORE_EVENT_ENDPOINT, json=payload, timeout=5)
     except Exception:
@@ -400,9 +395,6 @@ class HoneypotSSHServer(paramiko.ServerInterface):
         self.auth_attempts += 1
         self.username = username
 
-        # ── KILL CHAIN DETECTION ──────────────────────────────
-        # If attacker uses the exact credentials leaked in the HTTP .env file
-        # this confirms they completed the full HTTP → SSH kill chain
         if username == KILL_CHAIN_USER and password == KILL_CHAIN_PASSWORD:
             send_event("SSH_KILL_CHAIN_LOGIN", {
                 "username": username,
@@ -438,7 +430,7 @@ class HoneypotSSHServer(paramiko.ServerInterface):
 
 
 # ─────────────────────────────────────────────
-# COMMAND HANDLER
+# FAKE SHELL
 # ─────────────────────────────────────────────
 
 class FakeShell:
@@ -451,13 +443,10 @@ class FakeShell:
         self.command_count = 0
 
     def _out(self, text: str):
-        """Send a line of text to the SSH terminal with correct CRLF ending."""
-        # Strip any existing line endings, then add clean \r\n
         text = text.rstrip("\r\n")
         self.chan.send((text + "\r\n").encode("utf-8", errors="ignore"))
 
     def _resolve_path(self, path: str) -> str:
-        """Resolve a path relative to cwd."""
         if path.startswith("/"):
             return path.rstrip("/") or "/"
         parts = self.cwd.rstrip("/").split("/") + path.split("/")
@@ -471,15 +460,11 @@ class FakeShell:
         return "/" + "/".join(resolved)
 
     def handle(self, cmd: str) -> bool:
-        """
-        Handle one command. Returns False if session should end.
-        """
         if not cmd.strip():
             return True
 
         self.command_count += 1
 
-        # Log every command
         send_event("SSH_COMMAND", {
             "command": cmd,
             "client_ip": self.client_ip,
@@ -491,12 +476,10 @@ class FakeShell:
         base = parts[0]
         args = parts[1:]
 
-        # ── exit / logout ──────────────────────────
         if base in ("exit", "logout", "quit"):
             self._out("logout")
             return False
 
-        # ── ls ────────────────────────────────────
         elif base == "ls":
             target = self._resolve_path(args[-1]) if args and not args[-1].startswith("-") else self.cwd
             contents = FAKE_FS.get(target, [])
@@ -519,7 +502,6 @@ class FakeShell:
             else:
                 self._out("  ".join(contents))
 
-        # ── cd ────────────────────────────────────
         elif base == "cd":
             if not args or args[0] == "~":
                 self.cwd = FAKE_USERS.get(self.username, "/home/test")
@@ -530,45 +512,37 @@ class FakeShell:
                 else:
                     self._out(f"bash: cd: {args[0]}: No such file or directory")
 
-        # ── pwd ───────────────────────────────────
         elif base == "pwd":
             self._out(self.cwd)
 
-        # ── whoami ────────────────────────────────
         elif base == "whoami":
             self._out(self.username)
 
-        # ── id ────────────────────────────────────
         elif base == "id":
             uid = 0 if self.username == "root" else random.randint(1000, 1003)
             self._out(f"uid={uid}({self.username}) gid={uid}({self.username}) groups={uid}({self.username})")
 
-        # ── hostname ──────────────────────────────
         elif base == "hostname":
             self._out(HOSTNAME)
 
-        # ── uname ─────────────────────────────────
         elif base == "uname":
             if "-a" in args:
                 self._out("Linux prod-web-01 5.15.0-88-generic #98-Ubuntu SMP Mon Oct 2 15:18:56 UTC 2023 x86_64 x86_64 x86_64 GNU/Linux")
             else:
                 self._out("Linux")
 
-        # ── uptime ────────────────────────────────
         elif base == "uptime":
             days = random.randint(10, 120)
             self._out(f" 14:32:01 up {days} days,  2:14,  1 user,  load average: 0.{random.randint(10,40)}, 0.{random.randint(10,40)}, 0.{random.randint(10,40)}")
 
-        # ── cat ───────────────────────────────────
         elif base == "cat":
             if not args:
                 self._out("cat: missing operand")
                 return True
 
             filepath = self._resolve_path(args[0])
-
-            # High value file — log with elevated flag
             is_high_value = filepath in HIGH_VALUE_FILES
+
             if is_high_value:
                 send_event("SSH_HIGH_VALUE_ACCESS", {
                     "file": filepath,
@@ -577,46 +551,41 @@ class FakeShell:
                 }, high_value=True)
 
             if filepath in FAKE_FILE_CONTENTS:
-                # Send each line individually with correct CRLF
                 for line in FAKE_FILE_CONTENTS[filepath].split("\n"):
                     self._out(line)
             elif filepath in HIGH_VALUE_FILES:
-                self._out("cat: " + args[0] + ": Permission denied")
+                self._out(f"cat: {args[0]}: Permission denied")
             else:
                 parent = "/".join(filepath.split("/")[:-1]) or "/"
                 filename = filepath.split("/")[-1]
-                if parent in FAKE_FS and filename in FAKE_FS[parent]:
+                if parent in FAKE_FS and filename in FAKE_FS.get(parent, []):
                     self._out("")
                 else:
                     self._out(f"cat: {args[0]}: No such file or directory")
 
-        # ── echo ──────────────────────────────────
         elif base == "echo":
             self._out(" ".join(args))
 
-        # ── env / printenv ────────────────────────
         elif base in ("env", "printenv"):
             self._out(f"USER={self.username}")
             self._out(f"HOME={FAKE_USERS.get(self.username, '/home/test')}")
-            self._out(f"SHELL=/bin/bash")
-            self._out(f"PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+            self._out("SHELL=/bin/bash")
+            self._out("PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
             self._out(f"HOSTNAME={HOSTNAME}")
-            self._out(f"TERM=xterm-256color")
-            self._out(f"LANG=en_US.UTF-8")
+            self._out("TERM=xterm-256color")
+            self._out("LANG=en_US.UTF-8")
 
-        # ── ps ────────────────────────────────────
         elif base == "ps":
             self._out("  PID TTY          TIME CMD")
             self._out(f"{random.randint(1000,2000)}   pts/0    00:00:00 bash")
             self._out(f"{random.randint(2001,3000)}   pts/0    00:00:00 ps")
             if "aux" in cmd or "-aux" in args or "ax" in args:
                 self._out("USER         PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND")
-                self._out(f"root           1  0.0  0.1 169352 10908 ?        Ss   Oct28   0:08 /sbin/init")
-                self._out(f"root         523  0.0  0.0  72296  6284 ?        Ss   Oct28   0:00 /usr/sbin/sshd -D")
-                self._out(f"www-data    1042  0.1  0.5 412348 44212 ?        S    Oct28   2:11 nginx: worker process")
-                self._out(f"deploy      2103  0.0  0.8 712444 66840 ?        Sl   Nov01   1:03 python3 run.py")
+                self._out("root           1  0.0  0.1 169352 10908 ?        Ss   Oct28   0:08 /sbin/init")
+                self._out("root         523  0.0  0.0  72296  6284 ?        Ss   Oct28   0:00 /usr/sbin/sshd -D")
+                self._out("www-data    1042  0.1  0.5 412348 44212 ?        S    Oct28   2:11 nginx: worker process")
+                self._out("deploy      2103  0.0  0.8 712444 66840 ?        Sl   Nov01   1:03 python3 run.py")
 
-        # ── netstat / ss ──────────────────────────
         elif base in ("netstat", "ss"):
             self._out("Active Internet connections (only servers)")
             self._out("Proto Recv-Q Send-Q Local Address           Foreign Address         State")
@@ -625,14 +594,12 @@ class FakeShell:
             self._out("tcp        0      0 0.0.0.0:443             0.0.0.0:*               LISTEN")
             self._out(f"tcp        0      0 10.0.1.10:22            {self.client_ip}:54821  ESTABLISHED")
 
-        # ── ifconfig / ip addr ────────────────────
         elif base in ("ifconfig", "ip"):
             self._out("eth0: flags=4163<UP,BROADCAST,RUNNING,MULTICAST>  mtu 1500")
             self._out("        inet 10.0.1.10  netmask 255.255.255.0  broadcast 10.0.1.255")
             self._out("        inet6 fe80::4ab0:2dff:fe4a:1234  prefixlen 64  scopeid 0x20<link>")
             self._out("        ether 4a:b0:2d:4a:12:34  txqueuelen 1000  (Ethernet)")
 
-        # ── history ───────────────────────────────
         elif base == "history":
             history_file = f"{FAKE_USERS.get(self.username, '/home/test')}/.bash_history"
             if history_file in FAKE_FILE_CONTENTS:
@@ -642,19 +609,16 @@ class FakeShell:
                 self._out("    1  ls")
                 self._out("    2  pwd")
 
-        # ── find ──────────────────────────────────
         elif base == "find":
             send_event("SSH_RECON_COMMAND", {
                 "command": cmd,
                 "client_ip": self.client_ip,
             })
-            # Show a few believable results
             self._out("/home/admin/.env")
             self._out("/home/ubuntu/app/config.py")
             self._out("/var/www/html/wp-config.php")
             time.sleep(0.5)
 
-        # ── sudo ──────────────────────────────────
         elif base == "sudo":
             send_event("SSH_PRIVILEGE_ESCALATION", {
                 "command": cmd,
@@ -667,7 +631,6 @@ class FakeShell:
             time.sleep(1.0)
             self._out("sudo: 3 incorrect password attempts")
 
-        # ── su ────────────────────────────────────
         elif base == "su":
             send_event("SSH_PRIVILEGE_ESCALATION", {
                 "command": cmd,
@@ -677,7 +640,6 @@ class FakeShell:
             time.sleep(1.5)
             self._out("su: Authentication failure")
 
-        # ── wget ──────────────────────────────────
         elif base == "wget":
             url = args[0] if args else "unknown"
             send_event("SSH_DOWNLOAD_ATTEMPT", {
@@ -696,7 +658,6 @@ class FakeShell:
             time.sleep(1.5)
             self._out("payload  [=========================================>] 100%")
 
-        # ── curl ──────────────────────────────────
         elif base == "curl":
             url = next((a for a in args if a.startswith("http")), "unknown")
             send_event("SSH_DOWNLOAD_ATTEMPT", {
@@ -707,12 +668,9 @@ class FakeShell:
             time.sleep(2)
             self._out('{"status": "ok"}')
 
-        # ── chmod / chown ─────────────────────────
         elif base in ("chmod", "chown"):
-            # Silent success — lets attacker think it worked
-            pass
+            pass  # Silent success
 
-        # ── ssh (lateral movement attempt) ────────
         elif base == "ssh":
             send_event("SSH_LATERAL_MOVEMENT", {
                 "command": cmd,
@@ -722,7 +680,6 @@ class FakeShell:
             target = args[-1] if args else "unknown"
             self._out(f"ssh: connect to host {target} port 22: Connection timed out")
 
-        # ── scp ───────────────────────────────────
         elif base == "scp":
             send_event("SSH_DATA_EXFILTRATION", {
                 "command": cmd,
@@ -731,7 +688,6 @@ class FakeShell:
             time.sleep(2)
             self._out("scp: Connection timed out")
 
-        # ── python / python3 ──────────────────────
         elif base in ("python", "python3"):
             send_event("SSH_INTERPRETER_ACCESS", {
                 "command": cmd,
@@ -741,28 +697,23 @@ class FakeShell:
             self._out('[GCC 9.4.0] on linux\nType "help", "copyright", "credits" or "license" for more information.')
             self._out(">>> ")
 
-        # ── nano / vi / vim ───────────────────────
         elif base in ("nano", "vi", "vim"):
-            self._out(f"  GNU nano 4.8{' ' * 30}{args[0] if args else 'New Buffer'}")
+            self._out(f"  GNU nano 4.8{'  ' * 15}{args[0] if args else 'New Buffer'}")
             time.sleep(0.3)
             self._out("")
             self._out("^G Get Help  ^O Write Out  ^W Where Is  ^K Cut Text")
 
-        # ── clear ─────────────────────────────────
         elif base == "clear":
             self.chan.send(b"\033[2J\033[H")
 
-        # ── anything else ─────────────────────────
         else:
-            # Make common tools respond believably
             if base in ("apt", "apt-get", "yum", "snap"):
-                self._out(f"E: Could not open lock file /var/lib/dpkg/lock - open (13: Permission denied)")
+                self._out("E: Could not open lock file /var/lib/dpkg/lock - open (13: Permission denied)")
             elif base in ("systemctl", "service"):
                 self._out("Failed to connect to bus: No such file or directory")
-            elif base in ("docker",):
+            elif base == "docker":
                 self._out("Got permission denied while trying to connect to the Docker daemon socket")
             else:
-                # Randomly say not found OR permission denied for realism
                 if random.random() < 0.7:
                     self._out(f"bash: {base}: command not found")
                 else:
@@ -772,51 +723,45 @@ class FakeShell:
 
 
 # ─────────────────────────────────────────────
-# CLIENT HANDLER
+# LINE READER
 # ─────────────────────────────────────────────
 
 def readline(chan) -> str:
-    """
-    Read one line from a Paramiko channel.
-    Handles SSH PTY input correctly — echoes characters, handles backspace.
-    Returns the command string (without line terminator).
-    """
     line = b""
     while True:
         ch = chan.recv(1)
         if not ch:
             raise EOFError("channel closed")
 
-        # Enter key — \r or \n signals end of line
         if ch in (b"\r", b"\n"):
             chan.send(b"\r\n")
             break
 
-        # Backspace / DEL
         if ch in (b"\x7f", b"\x08"):
             if line:
                 line = line[:-1]
-                chan.send(b"\x08 \x08")  # erase character on terminal
+                chan.send(b"\x08 \x08")
             continue
 
-        # Ctrl+C
         if ch == b"\x03":
             chan.send(b"^C\r\n")
             return ""
 
-        # Ctrl+D (EOF)
         if ch == b"\x04":
             raise EOFError("ctrl+d")
 
-        # Ignore other control/escape sequences (arrow keys, etc.)
         if ch[0] < 32 or ch[0] == 127:
             continue
 
         line += ch
-        chan.send(ch)  # echo the character back
+        chan.send(ch)
 
     return line.decode("utf-8", errors="ignore").strip()
 
+
+# ─────────────────────────────────────────────
+# CLIENT HANDLER
+# ─────────────────────────────────────────────
 
 def handle_client(client, addr):
     ip = addr[0]
@@ -834,7 +779,6 @@ def handle_client(client, addr):
 
         user = server.username if server.username in FAKE_USERS else "test"
 
-        # Send MOTD
         motd = MOTD.format(
             date=time.strftime("%a %b %d %H:%M:%S UTC %Y"),
             load=random.randint(10, 60),
@@ -851,11 +795,10 @@ def handle_client(client, addr):
         shell = FakeShell(user, ip, chan)
 
         while True:
-            # Show prompt — update after every command so cd works
             prompt = (
                 f"{'root' if user == 'root' else user}"
                 f"@{HOSTNAME}:{shell.cwd}"
-                f"{'#' if user == 'root' else '$'} "
+                f"{'#' if user == 'root' else '$ '}"
             )
             chan.send(prompt.encode())
 
@@ -864,8 +807,7 @@ def handle_client(client, addr):
             except EOFError:
                 break
 
-            should_continue = shell.handle(cmd)
-            if not should_continue:
+            if not shell.handle(cmd):
                 break
 
     except Exception:
@@ -888,7 +830,7 @@ def start_ssh_honeypot():
     sock.listen(100)
     print(f"[SSH] Honeypot listening on port {SSH_PORT}")
     print(f"[SSH] Hostname: {HOSTNAME}")
-    print(f"[SSH] Core API: {CORE_EVENT_ENDPOINT}")
+    print(f"[SSH] Core API endpoint: {CORE_EVENT_ENDPOINT}")
 
     while True:
         try:
@@ -897,7 +839,7 @@ def start_ssh_honeypot():
             threading.Thread(
                 target=handle_client,
                 args=(client, addr),
-                daemon=True
+                daemon=True,
             ).start()
         except Exception as e:
             print(f"[SSH] Accept error: {e}")

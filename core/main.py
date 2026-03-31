@@ -1,30 +1,54 @@
-# core/main.py
-
-from flask import Flask, request
+from flask import Flask, request, jsonify
 from datetime import datetime, timezone
-
-from core.orchestrator import Orchestrator
+from werkzeug.middleware.proxy_fix import ProxyFix
 from forensics.logger import CentralLogger
 from behaviour.behaviour_classifier import BehaviourClassifier
 
+# ✅ Create app
 app = Flask(__name__)
 
-orchestrator = Orchestrator()
+# ✅ FIX: Disable host validation completely
+# This ensures Docker requests like "honeypot_core:5001" are accepted
+app.url_map.host_matching = False
+
+# Optional proxy fix (safe for Docker)
+app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1)
+
 logger = CentralLogger()
 classifier = BehaviourClassifier()
 
-# ---------------- EVENT INGEST ----------------
+# ─────────────────────────────────────────────
+# ORCHESTRATOR
+# ─────────────────────────────────────────────
+try:
+    from core.orchestrator import Orchestrator
+    orchestrator = Orchestrator()
+    ORCHESTRATOR_OK = True
+    print("[CORE] Orchestrator ready — Docker control enabled")
+except Exception as e:
+    orchestrator = None
+    ORCHESTRATOR_OK = False
+    print(f"[CORE] WARNING: Orchestrator unavailable — {e}")
 
+# ─────────────────────────────────────────────
+# DEBUG (IMPORTANT)
+# ─────────────────────────────────────────────
+@app.before_request
+def debug():
+    print(f"[REQ] {request.method} {request.path} HOST={request.host}")
+
+# ─────────────────────────────────────────────
+# EVENT INGEST
+# ─────────────────────────────────────────────
 @app.route("/event", methods=["POST"])
 def receive_event():
-    event = request.get_json(force=True)
+    event = request.get_json(silent=True)
 
     if not event or "event_type" not in event:
-        return {"error": "invalid event"}, 400
+        return jsonify({"error": "invalid event"}), 400
 
     result = classifier.process_event(event)
 
-    # FULL ENRICHMENT
     enriched = {
         **event,
         "behaviour": result.get("behaviour", "UNKNOWN"),
@@ -33,55 +57,86 @@ def receive_event():
         "risk_score": result.get("risk_score", 0.0),
         "response": result.get("response", {}),
         "state_transition": result.get("state_transition", {}),
+        "kill_chain": result.get("kill_chain", {}),
         "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
     logger.log(enriched)
+    return jsonify(enriched), 200
 
-    # Return enriched so services (HTTP/SSH) can adapt
-    return enriched, 200
-
-
-# ---------------- HTTP CONTROLS ----------------
-
+# ─────────────────────────────────────────────
+# HTTP CONTROLS
+# ─────────────────────────────────────────────
 @app.route("/control/http/start", methods=["POST"])
 def start_http():
-    orchestrator.start_http()
-    return {"started": True}, 200
-
+    if not ORCHESTRATOR_OK:
+        return jsonify({"error": "Docker not available"}), 503
+    try:
+        orchestrator.start_http()
+        return jsonify({"started": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/control/http/stop", methods=["POST"])
 def stop_http():
-    orchestrator.stop_http()
-    return {"stopped": True}, 200
-
+    if not ORCHESTRATOR_OK:
+        return jsonify({"error": "Docker not available"}), 503
+    try:
+        orchestrator.stop_http()
+        return jsonify({"stopped": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/control/http/status", methods=["GET"])
 def http_status():
-    return {"running": orchestrator.http_running()}, 200
+    if not ORCHESTRATOR_OK:
+        return jsonify({"running": False, "docker_available": False}), 200
+    try:
+        return jsonify({
+            "running": orchestrator.http_running(),
+            "docker_available": True,
+        }), 200
+    except Exception as e:
+        return jsonify({"running": False, "docker_available": False, "error": str(e)}), 200
 
-
-# ---------------- SSH CONTROLS ----------------
-
+# ─────────────────────────────────────────────
+# SSH CONTROLS
+# ─────────────────────────────────────────────
 @app.route("/control/ssh/start", methods=["POST"])
 def start_ssh():
-    orchestrator.start_ssh()
-    return {"started": True}, 200
-
+    if not ORCHESTRATOR_OK:
+        return jsonify({"error": "Docker not available"}), 503
+    try:
+        orchestrator.start_ssh()
+        return jsonify({"started": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/control/ssh/stop", methods=["POST"])
 def stop_ssh():
-    orchestrator.stop_ssh()
-    return {"stopped": True}, 200
-
+    if not ORCHESTRATOR_OK:
+        return jsonify({"error": "Docker not available"}), 503
+    try:
+        orchestrator.stop_ssh()
+        return jsonify({"stopped": True}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 @app.route("/control/ssh/status", methods=["GET"])
 def ssh_status():
-    return {"running": orchestrator.ssh_running()}, 200
+    if not ORCHESTRATOR_OK:
+        return jsonify({"running": False, "docker_available": False}), 200
+    try:
+        return jsonify({
+            "running": orchestrator.ssh_running(),
+            "docker_available": True,
+        }), 200
+    except Exception as e:
+        return jsonify({"running": False, "docker_available": False, "error": str(e)}), 200
 
-
-# ---------------- MAIN ----------------
-
+# ─────────────────────────────────────────────
+# ENTRY
+# ─────────────────────────────────────────────
 if __name__ == "__main__":
-    print("[CORE] Behaviour-Aware Honeypot starting...")
-    app.run(host="0.0.0.0", port=5001)
+    print("[CORE] Starting API on 5001...")
+    app.run(host="0.0.0.0", port=5001, threaded=True, use_reloader=False)

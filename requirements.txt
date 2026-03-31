@@ -1,14 +1,10 @@
-docker
 flask
-streamlit
+requests
 scikit-learn
 numpy
 pandas
 pyyaml
 rich
-paramiko
 scipy
-sentence-transformers
-transformers
-torch
-sentencepiece
+joblib
+paramiko

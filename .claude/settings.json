@@ -1,0 +1,6 @@
+{
+  "OPENROUTER_API_KEY": "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",
+  "ANTHROPIC_BASE_URL": "https://openrouter.ai/api",
+  "ANTHROPIC_AUTH_TOKEN": "$OPENROUTER_API_KEY",
+  "ANTHROPIC_API_KEY": "" // Important: Must be explicitly empty
+}

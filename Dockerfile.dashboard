@@ -1,7 +1,7 @@
 # Dockerfile.dashboard
 # ─────────────────────────────────────────────────────────────
-# CODE IMAGE — builds on top of base, copies source only
-# Fast rebuild on every dashboard change:
+# CODE IMAGE — builds on top of dashboard base
+# Rebuild on dashboard code changes:
 #   docker compose build dashboard
 # ─────────────────────────────────────────────────────────────
 

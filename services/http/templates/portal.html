@@ -47,11 +47,12 @@ Solutions{% endblock %} {% block content %}
     </div>
   </div>
 
+  <!-- FIX #10: Removed direct link to /backup/server_info.txt
+       The original code gave attackers the SSH credentials on a plate.
+       Now the attacker must discover /backup themselves via robots.txt
+       or directory enumeration — which is the intended challenge. -->
   <div class="portal-notice">
-    <p>
-      For server access issues contact <strong>ops@novatech.internal</strong> or
-      check the <a href="/backup/server_info.txt">server info doc</a>.
-    </p>
+    <p>For access issues contact <strong>ops@novatech.internal</strong>.</p>
   </div>
 </section>
 

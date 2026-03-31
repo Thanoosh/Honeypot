@@ -2,14 +2,13 @@
 # Behaviour-Aware Honeypot — One-command startup
 #
 # ─────────────────────────────────────────────
-# WORKFLOW:
-#
-# FIRST TIME (or when requirements.txt changes):
-#   docker compose build core-base dashboard-base
-#   docker compose build
+# FIRST TIME (or full rebuild):
+#   docker compose down --volumes --remove-orphans
+#   docker compose build --no-cache core-base dashboard-base
+#   docker compose build --no-cache core dashboard
 #   docker compose up
 #
-# EVERY DAY (code changes only — fast, ~5 seconds):
+# DAILY (code changes only — fast):
 #   docker compose build core
 #   docker compose up
 #
@@ -26,8 +25,6 @@ networks:
 services:
 
   # ── CORE BASE (dependencies only) ─────────
-  # Run ONCE or when requirements.txt changes.
-  # Never runs as a container — just builds the base image.
   core-base:
     build:
       context: .
@@ -58,18 +55,18 @@ services:
     volumes:
       - ./data/logs:/app/data/logs
       - ./data/ml:/app/data/ml
+      # Docker socket — required for Start/Stop honeypot buttons
+      - /var/run/docker.sock:/var/run/docker.sock
     networks:
       - honeypot_net
     environment:
       - PYTHONUNBUFFERED=1
-      # Use Docker Desktop TCP endpoint — works from inside Linux containers on Windows
-      - DOCKER_HOST=tcp://host.docker.internal:2375
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/control/http/status"]
       interval: 10s
       timeout: 5s
-      retries: 3
-      start_period: 5s
+      retries: 5
+      start_period: 10s
 
   # ── DASHBOARD ─────────────────────────────
   dashboard:
@@ -87,7 +84,7 @@ services:
       - honeypot_net
     environment:
       - PYTHONUNBUFFERED=1
-      - CORE_API=http://honeypot_core:5001
+      - CORE_API=http://172.18.0.2:5001   # ✅ FIX (DIRECT IP)
     depends_on:
       core:
         condition: service_healthy

@@ -1,56 +1,96 @@
-# dashboard/dashboard.py
-
 import os
 import streamlit as st
 import json
 import time
 import requests
-from collections import Counter
+from collections import Counter, defaultdict
 from pathlib import Path
+from datetime import datetime, timezone
 
 LOG_FILE = Path("data/logs/events.log")
-CORE_API = os.environ.get("CORE_API", "http://127.0.0.1:5001")
+
+# ✅ FIX: Always resolve correct CORE API
+CORE_API = os.environ.get("CORE_API")
+if not CORE_API:
+    CORE_API = "http://honeypot_core:5001"
 
 st.set_page_config(
     page_title="Behaviour-Aware Honeypot Dashboard",
-    layout="wide"
+    layout="wide",
 )
 
 st.title("🛡️ Behaviour-Aware Honeypot Dashboard")
 
-# ---------------- HELPERS ----------------
+# ─────────────────────────────────────────────
+# HELPERS (HARDENED)
+# ─────────────────────────────────────────────
 
 def api_get(path):
     try:
-        return requests.get(f"{CORE_API}{path}", timeout=2).json()
-    except Exception:
+        url = f"{CORE_API}{path}"
+        r = requests.get(
+            url,
+            timeout=5,
+            headers={"Host": "localhost:5001"}  # ✅ CRITICAL FIX
+        )
+
+        if r.status_code == 200:
+            return r.json()
+
+        print(f"[DASHBOARD] GET FAILED {url} → {r.status_code}")
         return {}
+
+    except Exception as e:
+        print(f"[DASHBOARD] GET ERROR: {e}")
+        return {}
+
 
 def api_post(path):
     try:
-        requests.post(f"{CORE_API}{path}", timeout=2)
-    except Exception:
-        pass
+        url = f"{CORE_API}{path}"
+        r = requests.post(
+            url,
+            timeout=5,
+            headers={"Host": "localhost:5001"}  # ✅ CRITICAL FIX
+        )
+
+        print(f"[DASHBOARD] POST {url} → {r.status_code}")
+
+    except Exception as e:
+        print(f"[DASHBOARD] POST ERROR: {e}")
+
 
 def load_events():
     if not LOG_FILE.exists():
         return []
+
     events = []
     with open(LOG_FILE, "r", encoding="utf-8") as f:
         for line in f:
             try:
                 events.append(json.loads(line))
-            except json.JSONDecodeError:
+            except:
                 pass
     return events
 
 
-# ---------------- SIDEBAR CONTROLS ----------------
+def parse_time(ts):
+    try:
+        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+        return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+    except:
+        return None
+
+
+# ─────────────────────────────────────────────
+# SIDEBAR
+# ─────────────────────────────────────────────
 
 st.sidebar.header("🎛️ Service Controls")
 
-# ---- HTTP ----
-http_running = api_get("/control/http/status").get("running", False)
+http_status = api_get("/control/http/status")
+http_running = http_status.get("running", False)
+docker_ok = http_status.get("docker_available", False)
 
 if http_running:
     st.sidebar.success("HTTP Honeypot: RUNNING")
@@ -65,8 +105,8 @@ else:
 
 st.sidebar.divider()
 
-# ---- SSH ----
-ssh_running = api_get("/control/ssh/status").get("running", False)
+ssh_status = api_get("/control/ssh/status")
+ssh_running = ssh_status.get("running", False)
 
 if ssh_running:
     st.sidebar.success("SSH Honeypot: RUNNING")
@@ -81,43 +121,47 @@ else:
 
 st.sidebar.divider()
 
-# ---- Core API status ----
-if api_get("/control/http/status"):
+if http_status:
     st.sidebar.success("🟢 Core API: CONNECTED")
+    if docker_ok:
+        st.sidebar.success("🟢 Docker: AVAILABLE")
+    else:
+        st.sidebar.error("🔴 Docker: UNAVAILABLE")
 else:
     st.sidebar.error("🔴 Core API: UNREACHABLE")
 
-st.sidebar.divider()
+refresh_interval = st.sidebar.slider("Refresh interval (seconds)", 1, 10, 3)
 
-refresh_interval = st.sidebar.slider(
-    "Refresh interval (seconds)", 1, 10, 3
-)
-
-# ---------------- MAIN VIEW ----------------
+# ─────────────────────────────────────────────
+# MAIN LOOP
+# ─────────────────────────────────────────────
 
 placeholder = st.empty()
 
 while True:
     with placeholder.container():
+
         events = load_events()
 
-        behaviour_counts = Counter(
-            e.get("behaviour", "UNKNOWN") for e in events
-        )
+        behaviour_counts = Counter(e.get("behaviour", "UNKNOWN") for e in events)
 
-        col1, col2, col3 = st.columns(3)
-        col1.metric("Total Events", len(events))
-        col2.metric("Automated Attacks", behaviour_counts.get("AUTOMATED_ATTACK", 0))
-        col3.metric("Persistent Attackers", behaviour_counts.get("PERSISTENT_ATTACKER", 0))
+        attacker_ips = {
+            e.get("details", {}).get("client_ip")
+            for e in events if e.get("details", {}).get("client_ip")
+        }
 
-        st.subheader("🧠 Behaviour Breakdown")
+        timeline = defaultdict(int)
+        for e in events:
+            ts = parse_time(e.get("timestamp", ""))
+            if ts:
+                timeline[ts.replace(second=0, microsecond=0)] += 1
+
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Events", len(events))
+        c2.metric("Attackers", len(attacker_ips))
+        c3.metric("Malicious", behaviour_counts.get("MALICIOUS", 0))
+
         st.bar_chart(behaviour_counts)
-
-        st.subheader("📜 Recent Events")
-        for event in reversed(events[-10:]):
-            with st.expander(
-                f"{event.get('event_type')} | {event.get('behaviour', 'N/A')}"
-            ):
-                st.json(event)
+        st.line_chart(timeline)
 
     time.sleep(refresh_interval)

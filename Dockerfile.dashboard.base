@@ -1,10 +1,4 @@
 # Dockerfile.dashboard.base
-# ─────────────────────────────────────────────────────────────
-# BASE IMAGE — dashboard dependencies only
-# Only rebuild when requirements change:
-#   docker build -f Dockerfile.dashboard.base -t honeypot-dashboard-base .
-# ─────────────────────────────────────────────────────────────
-
 FROM python:3.10-slim
 
 WORKDIR /app

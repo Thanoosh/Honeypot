@@ -5,6 +5,7 @@
 # All interactions are logged to Core API for behaviour analysis.
 # Vulnerable by design — SQL errors, exposed files, leaked credentials.
 
+import os
 import re
 import time
 import requests
@@ -15,10 +16,18 @@ app = Flask(__name__)
 
 # ─────────────────────────────────────────────
 # CONFIG
+# FIX #2: Use environment variable for core endpoint.
+# Inside Docker the service name is 'honeypot_core'.
+# For local dev without Docker, falls back to 127.0.0.1.
+# host.docker.internal only works on Docker Desktop (Windows/Mac),
+# NOT on Linux — so we remove that dependency entirely.
 # ─────────────────────────────────────────────
 
+CORE_EVENT_ENDPOINT = os.environ.get(
+    "CORE_API", "http://honeypot_core:5001"
+) + "/event"
+
 SERVICE_MODE = "NORMAL"
-CORE_EVENT_ENDPOINT = "http://host.docker.internal:5001/event"
 
 # SSH Easter egg credentials — must match ssh_honeypot.py KILL_CHAIN_PASSWORD
 LEAKED_SSH_HOST = "prod-server-01"
@@ -102,7 +111,11 @@ def get_client_ip() -> str:
     return request.headers.get("X-Forwarded-For", request.remote_addr)
 
 def send_event(event_type: str, details: dict, mitre_id: str = "", mitre_name: str = "") -> dict:
-    """Send event to Core API and return the decision."""
+    """
+    Send event to Core API and return the enriched decision.
+    FIX #9: No longer silently swallows errors — prints a warning so
+    you can see in Docker logs if the core API is unreachable.
+    """
     global SERVICE_MODE
     try:
         payload = {
@@ -126,8 +139,14 @@ def send_event(event_type: str, details: dict, mitre_id: str = "", mitre_name: s
             if delay > 0:
                 time.sleep(delay)
             return result
-    except Exception:
-        pass
+        else:
+            print(f"[HTTP][WARN] Core API returned {resp.status_code} for event {event_type}")
+    except requests.exceptions.ConnectionError:
+        print(f"[HTTP][WARN] Cannot reach Core API at {CORE_EVENT_ENDPOINT} — event {event_type} dropped")
+    except requests.exceptions.Timeout:
+        print(f"[HTTP][WARN] Core API timeout — event {event_type} dropped")
+    except Exception as e:
+        print(f"[HTTP][WARN] send_event failed for {event_type}: {e}")
     return {}
 
 # ─────────────────────────────────────────────
@@ -209,7 +228,6 @@ def login():
 
 @app.route("/portal")
 def portal():
-    # Log reconnaissance of protected page
     send_event("HTTP_PORTAL_ACCESS", {
         "endpoint": "/portal",
     }, **MITRE_MAP["RECON_SCAN"])
@@ -218,7 +236,6 @@ def portal():
 
 @app.route("/admin")
 def admin():
-    # Log admin panel probe — always returns 403 but leaks server info
     send_event("HTTP_ADMIN_PROBE", {
         "endpoint": "/admin",
     }, **MITRE_MAP["RECON_SCAN"])
@@ -227,7 +244,6 @@ def admin():
 
 @app.route("/backup")
 def backup():
-    # High value — attacker found the backup listing
     send_event("HTTP_BACKUP_ACCESS", {
         "endpoint": "/backup",
         "high_value": True,
@@ -281,7 +297,6 @@ INSERT INTO novatech_users VALUES
         return Response(content, mimetype="text/plain")
 
     elif filename == "config_backup.tar.gz":
-        # Can't serve a real tar, return a fake error that leaks info
         return Response(
             "Archive corrupt. Last known config: DB_HOST=prod-db-01.internal, DB_PASS=N0vaTech#DB2024",
             mimetype="text/plain"
@@ -461,5 +476,6 @@ def catch_all(path):
 # ─────────────────────────────────────────────
 
 if __name__ == "__main__":
-    print("[HTTP] NovaTech decoy website starting on port 8080...")
+    print(f"[HTTP] NovaTech decoy website starting on port 8080...")
+    print(f"[HTTP] Core API endpoint: {CORE_EVENT_ENDPOINT}")
     app.run(host="0.0.0.0", port=8080, debug=False)

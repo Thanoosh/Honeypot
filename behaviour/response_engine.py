@@ -11,6 +11,7 @@ from behaviour.deception_payloads import (
 class ResponseEngine:
     """
     Decides responses + deception payloads based on behaviour & attack type.
+    FIX #7: KILL_CHAIN_CONFIRMED is now handled as a valid behaviour state.
     """
 
     def decide(self, behaviour: str, attack_type: str, confidence: float) -> Dict[str, Any]:
@@ -19,6 +20,13 @@ class ResponseEngine:
 
         if confidence < 0.4:
             return self._allow("low confidence activity")
+
+        # FIX #7: Handle kill chain state — maximum deception response
+        if behaviour == "KILL_CHAIN_CONFIRMED":
+            return self._deceive(
+                "Kill chain complete — attacker used HTTP creds to SSH in",
+                payload=fake_credentials(),
+            )
 
         if attack_type == "SQL INJECTION":
             return self._handle_sqli(behaviour)

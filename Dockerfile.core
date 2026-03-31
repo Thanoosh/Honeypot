@@ -1,7 +1,7 @@
 # Dockerfile.core
 # ─────────────────────────────────────────────────────────────
 # CODE IMAGE — builds on top of base, copies source only
-# Rebuild this on every code change — takes ~5 seconds:
+# Rebuild this on every code change:
 #   docker compose build core
 #
 # Only rebuild base when requirements.txt changes:
@@ -12,7 +12,7 @@ FROM honeypot-base:latest
 
 WORKDIR /app
 
-# Copy source code — this is the only layer that changes day to day
+# Copy source code
 COPY core/        ./core/
 COPY behaviour/   ./behaviour/
 COPY forensics/   ./forensics/

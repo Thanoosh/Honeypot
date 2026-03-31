@@ -13,8 +13,13 @@ class BehaviourClassifier:
     MALICIOUS = "MALICIOUS"
     CONFIRMED_ATTACK = "CONFIRMED_ATTACK"
 
-    # Kill chain — attacker used HTTP to find SSH creds then logged in via SSH
-    KILL_CHAIN = "KILL_CHAIN_CONFIRMED"
+    # FIX #7: KILL_CHAIN_CONFIRMED is now a proper class constant
+    # so the dashboard, response engine, and all other modules
+    # can reference BehaviourClassifier.KILL_CHAIN_CONFIRMED
+    KILL_CHAIN_CONFIRMED = "KILL_CHAIN_CONFIRMED"
+
+    # Priority order used for escalation comparisons
+    STATE_PRIORITY = [NEW, PROBING, SUSPICIOUS, MALICIOUS, CONFIRMED_ATTACK, KILL_CHAIN_CONFIRMED]
 
     def __init__(self):
         self.attackers = defaultdict(self._init_attacker)
@@ -29,7 +34,6 @@ class BehaviourClassifier:
             "risk": 0.0,
             "first_seen": time.time(),
             "last_seen": time.time(),
-            # Kill chain tracking
             "accessed_env_file": False,
             "accessed_backup": False,
             "ssh_kill_chain": False,
@@ -51,28 +55,25 @@ class BehaviourClassifier:
         entropy = float(event.get("details", {}).get("entropy", 0.0))
         high_value = event.get("details", {}).get("high_value", False)
 
-        # MITRE technique from HTTP service
         mitre_id = event.get("mitre_technique_id", "")
         mitre_name = event.get("mitre_technique_name", "")
 
-        # ── KILL CHAIN TRACKING ────────────────────────────────
-        # Track attacker's progression from HTTP recon to SSH access
+        # ── KILL CHAIN TRACKING ─────────────────────────────────
 
-        # Stage 1 — attacker found .env or backup files via HTTP
         if event_type in ("HTTP_ENV_FILE_ACCESS", "HTTP_BACKUP_FILE_ACCESS"):
             attacker["accessed_env_file"] = True
-            attacker["risk"] += 5  # high risk jump for credential access
+            attacker["risk"] += 5
 
         if event_type == "HTTP_BACKUP_ACCESS":
             attacker["accessed_backup"] = True
             attacker["risk"] += 3
 
-        # Stage 2 — attacker used SSH with kill chain credentials
         if event_type == "SSH_KILL_CHAIN_LOGIN":
             attacker["ssh_kill_chain"] = True
-            attacker["risk"] += 10  # maximum risk
+            attacker["risk"] += 10
 
         # ── RISK SCORING ────────────────────────────────────────
+
         if attack_type != "BENIGN":
             attacker["malicious_events"] += 1
             attacker["risk"] += 2
@@ -83,11 +84,11 @@ class BehaviourClassifier:
         if high_value:
             attacker["risk"] += 3
 
-        # Cross-service pivot bonus
         if len(attacker["services"]) > 1:
             attacker["risk"] += 2
 
         # ── STATE TRANSITION ────────────────────────────────────
+
         prev_state = attacker["state"]
         new_state, reasons = self._transition(attacker)
         attacker["state"] = new_state
@@ -120,32 +121,42 @@ class BehaviourClassifier:
         }
 
     # ── STATE TRANSITIONS ───────────────────────────────────────
+    # FIX #6: Transitions are now checked from HIGHEST to LOWEST priority.
+    # Previously SUSPICIOUS (1 event) was checked before MALICIOUS (3 events)
+    # meaning an attacker could never escalate past SUSPICIOUS.
+    # Now the order is: kill chain → confirmed → malicious → suspicious → probing → new
+    # Each check uses the CURRENT state so we only ever escalate, never de-escalate.
 
     def _transition(self, attacker):
         reasons = []
 
-        # Kill chain always wins — highest state
+        # Kill chain always wins — absolute highest state
         if attacker["ssh_kill_chain"]:
             reasons.append("kill chain confirmed — HTTP recon led to SSH access")
-            return self.KILL_CHAIN, reasons
+            return self.KILL_CHAIN_CONFIRMED, reasons
 
-        if attacker["events"] >= 2 and attacker["state"] == self.NEW:
-            reasons.append("multiple interactions")
-            return self.PROBING, reasons
-
-        if attacker["malicious_events"] >= 1:
-            reasons.append("malicious event detected")
-            return self.SUSPICIOUS, reasons
-
-        if attacker["malicious_events"] >= 3 or attacker["risk"] > 6:
-            reasons.append("repeated malicious behaviour")
-            return self.MALICIOUS, reasons
-
+        # Confirmed attack — persistent high-risk
         if attacker["risk"] > 10 and attacker["events"] > 5:
             reasons.append("persistent high-risk attacker")
             return self.CONFIRMED_ATTACK, reasons
 
-        return attacker["state"], ["no escalation"]
+        # Malicious — repeated attacks OR high risk score
+        if attacker["malicious_events"] >= 3 or attacker["risk"] > 6:
+            reasons.append("repeated malicious behaviour or high risk score")
+            return self.MALICIOUS, reasons
+
+        # Suspicious — first malicious event detected
+        if attacker["malicious_events"] >= 1:
+            reasons.append("malicious event detected")
+            return self.SUSPICIOUS, reasons
+
+        # Probing — multiple interactions but nothing malicious yet
+        if attacker["events"] >= 2 and attacker["state"] == self.NEW:
+            reasons.append("multiple interactions observed")
+            return self.PROBING, reasons
+
+        # No change
+        return attacker["state"], ["no escalation triggered"]
 
     def _extract_ip(self, event):
         return event.get("details", {}).get("client_ip") or "UNKNOWN"
