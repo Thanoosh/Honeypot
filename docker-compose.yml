@@ -1,0 +1,111 @@
+# docker-compose.yml
+# Behaviour-Aware Honeypot — One-command startup
+#
+# ─────────────────────────────────────────────
+# WORKFLOW:
+#
+# FIRST TIME (or when requirements.txt changes):
+#   docker compose build core-base dashboard-base
+#   docker compose build
+#   docker compose up
+#
+# EVERY DAY (code changes only — fast, ~5 seconds):
+#   docker compose build core
+#   docker compose up
+#
+# DASHBOARD CHANGES ONLY:
+#   docker compose build dashboard
+#   docker compose up
+# ─────────────────────────────────────────────
+
+networks:
+  honeypot_net:
+    driver: bridge
+    name: honeypot_net
+
+services:
+
+  # ── CORE BASE (dependencies only) ─────────
+  # Run ONCE or when requirements.txt changes.
+  # Never runs as a container — just builds the base image.
+  core-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.core.base
+    image: honeypot-base:latest
+    profiles:
+      - base
+
+  # ── DASHBOARD BASE (dependencies only) ────
+  dashboard-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard.base
+    image: honeypot-dashboard-base:latest
+    profiles:
+      - base
+
+  # ── CORE API ──────────────────────────────
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    image: honeypot-core:latest
+    container_name: honeypot_core
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      - ./data/logs:/app/data/logs
+      - ./data/ml:/app/data/ml
+    networks:
+      - honeypot_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      # Use Docker Desktop TCP endpoint — works from inside Linux containers on Windows
+      - DOCKER_HOST=tcp://host.docker.internal:2375
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/control/http/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+  # ── DASHBOARD ─────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: honeypot-dashboard:latest
+    container_name: honeypot_dashboard
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data/logs:/app/data/logs
+    networks:
+      - honeypot_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CORE_API=http://honeypot_core:5001
+    depends_on:
+      core:
+        condition: service_healthy
+
+  # ── HTTP HONEYPOT IMAGE (pre-built, not auto-started) ──
+  honeypot_http_image:
+    build:
+      context: ./services/http
+      dockerfile: Dockerfile
+    image: honeypot_http_image
+    profiles:
+      - build_only
+
+  # ── SSH HONEYPOT IMAGE (pre-built, not auto-started) ──
+  honeypot_ssh_image:
+    build:
+      context: ./services/ssh
+      dockerfile: Dockerfile
+    image: honeypot_ssh_image
+    profiles:
+      - build_only

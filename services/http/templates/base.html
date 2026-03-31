@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{% block title %}NovaTech Solutions{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css" />
+  </head>
+  <body>
+    <nav class="navbar">
+      <div class="nav-container">
+        <a href="/" class="nav-logo">
+          <span class="logo-icon">⬡</span>
+          <span class="logo-text">NovaTech</span>
+          <span class="logo-sub">Solutions</span>
+        </a>
+        <ul class="nav-links">
+          <li><a href="/">Home</a></li>
+          <li><a href="/about">About</a></li>
+          <li><a href="/portal">Portal</a></li>
+          <li><a href="/login" class="nav-cta">Login</a></li>
+        </ul>
+      </div>
+    </nav>
+
+    <main>{% block content %}{% endblock %}</main>
+
+    <footer class="footer">
+      <div class="footer-container">
+        <div class="footer-col">
+          <h4>NovaTech Solutions</h4>
+          <p>Enterprise infrastructure and cloud services since 2015.</p>
+        </div>
+        <div class="footer-col">
+          <h4>Products</h4>
+          <ul>
+            <li><a href="#">CloudSync</a></li>
+            <li><a href="#">DataVault</a></li>
+            <li><a href="#">SecureOps</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Company</h4>
+          <ul>
+            <li><a href="/about">About Us</a></li>
+            <li><a href="#">Careers</a></li>
+            <li><a href="#">Contact</a></li>
+          </ul>
+        </div>
+        <div class="footer-col">
+          <h4>Legal</h4>
+          <ul>
+            <li><a href="#">Privacy Policy</a></li>
+            <li><a href="#">Terms of Service</a></li>
+          </ul>
+        </div>
+      </div>
+      <div class="footer-bottom">
+        <p>&copy; 2024 NovaTech Solutions Inc. All rights reserved.</p>
+        <p class="footer-server">Server: prod-web-01 | v2.4.1</p>
+      </div>
+    </footer>
+  </body>
+</html>

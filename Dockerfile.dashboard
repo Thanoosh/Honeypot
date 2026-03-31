@@ -1,0 +1,21 @@
+# Dockerfile.dashboard
+# ─────────────────────────────────────────────────────────────
+# CODE IMAGE — builds on top of base, copies source only
+# Fast rebuild on every dashboard change:
+#   docker compose build dashboard
+# ─────────────────────────────────────────────────────────────
+
+FROM honeypot-dashboard-base:latest
+
+WORKDIR /app
+
+COPY dashboard/ ./dashboard/
+
+RUN mkdir -p data/logs
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "dashboard/dashboard.py", \
+    "--server.port=8501", \
+    "--server.address=0.0.0.0", \
+    "--server.headless=true"]

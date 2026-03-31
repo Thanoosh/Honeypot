@@ -1,5 +1,6 @@
 # dashboard/dashboard.py
 
+import os
 import streamlit as st
 import json
 import time
@@ -8,7 +9,7 @@ from collections import Counter
 from pathlib import Path
 
 LOG_FILE = Path("data/logs/events.log")
-CORE_API = "http://127.0.0.1:5001"
+CORE_API = os.environ.get("CORE_API", "http://127.0.0.1:5001")
 
 st.set_page_config(
     page_title="Behaviour-Aware Honeypot Dashboard",
@@ -77,6 +78,14 @@ else:
     if st.sidebar.button("▶ Start SSH Honeypot"):
         api_post("/control/ssh/start")
         st.rerun()
+
+st.sidebar.divider()
+
+# ---- Core API status ----
+if api_get("/control/http/status"):
+    st.sidebar.success("🟢 Core API: CONNECTED")
+else:
+    st.sidebar.error("🔴 Core API: UNREACHABLE")
 
 st.sidebar.divider()
 

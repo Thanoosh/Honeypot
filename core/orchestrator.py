@@ -7,6 +7,10 @@ class Orchestrator:
     HTTP_CONTAINER = "honeypot_http"
     SSH_CONTAINER = "honeypot_ssh"
 
+    # Network created by docker-compose — all containers must join it
+    # so honeypots can reach core at http://honeypot_core:5001
+    NETWORK = "honeypot_net"
+
     # ---------------- HELPERS ----------------
 
     def _container_exists(self, name: str) -> bool:
@@ -40,14 +44,12 @@ class Orchestrator:
         print("[ORCH] Starting HTTP honeypot...")
         subprocess.run(
             [
-                "docker",
-                "run",
+                "docker", "run",
                 "-d",
                 "--rm",
-                "--name",
-                self.HTTP_CONTAINER,
-                "-p",
-                "8080:8080",
+                "--name", self.HTTP_CONTAINER,
+                "--network", self.NETWORK,
+                "-p", "8080:8080",
                 "honeypot_http_image",
             ],
             check=False,
@@ -73,16 +75,25 @@ class Orchestrator:
             return
 
         print("[ORCH] Starting SSH honeypot...")
+
+        # Resolve the project data directory for the volume mount
+        # This gives the SSH container access to data/ssh_host_rsa_key
+        # so the host key persists across restarts (no more fingerprint warnings)
+        import os
+        project_root = os.path.abspath(
+            os.path.join(os.path.dirname(__file__), "..")
+        )
+        data_dir = os.path.join(project_root, "data")
+
         subprocess.run(
             [
-                "docker",
-                "run",
+                "docker", "run",
                 "-d",
                 "--rm",
-                "--name",
-                self.SSH_CONTAINER,
-                "-p",
-                "2222:2222",
+                "--name", self.SSH_CONTAINER,
+                "--network", self.NETWORK,
+                "-p", "2222:2222",
+                "-v", f"{data_dir}:/app/data",   # persistent key storage
                 "honeypot_ssh_image",
             ],
             check=False,

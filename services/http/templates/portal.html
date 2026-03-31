@@ -1,0 +1,58 @@
+{% extends "base.html" %} {% block title %}Employee Portal — NovaTech
+Solutions{% endblock %} {% block content %}
+
+<section class="portal-section">
+  <div class="portal-header">
+    <h1>Employee Portal</h1>
+    <p>You must be logged in to access internal tools.</p>
+    <a href="/login" class="btn-primary">Login to Continue</a>
+  </div>
+
+  <div class="portal-grid">
+    <div class="portal-card locked">
+      <div class="card-icon">📊</div>
+      <h3>Analytics Dashboard</h3>
+      <p>Real-time metrics, KPIs, and reporting.</p>
+      <span class="locked-badge">🔒 Login Required</span>
+    </div>
+    <div class="portal-card locked">
+      <div class="card-icon">☁️</div>
+      <h3>Cloud Console</h3>
+      <p>Manage AWS resources, EC2 instances, S3 buckets.</p>
+      <span class="locked-badge">🔒 Login Required</span>
+    </div>
+    <div class="portal-card locked">
+      <div class="card-icon">🗄️</div>
+      <h3>Database Manager</h3>
+      <p>PostgreSQL admin panel — prod-db-01.internal</p>
+      <span class="locked-badge">🔒 Admin Only</span>
+    </div>
+    <div class="portal-card locked">
+      <div class="card-icon">🚀</div>
+      <h3>Deployment Pipeline</h3>
+      <p>CI/CD status, deployments, rollback controls.</p>
+      <span class="locked-badge">🔒 Login Required</span>
+    </div>
+    <div class="portal-card locked">
+      <div class="card-icon">📁</div>
+      <h3>File Storage</h3>
+      <p>Shared drives, backups, and archived data.</p>
+      <span class="locked-badge">🔒 Login Required</span>
+    </div>
+    <div class="portal-card locked">
+      <div class="card-icon">⚙️</div>
+      <h3>Server Management</h3>
+      <p>SSH access, server configs, system logs.</p>
+      <span class="locked-badge">🔒 Admin Only</span>
+    </div>
+  </div>
+
+  <div class="portal-notice">
+    <p>
+      For server access issues contact <strong>ops@novatech.internal</strong> or
+      check the <a href="/backup/server_info.txt">server info doc</a>.
+    </p>
+  </div>
+</section>
+
+{% endblock %}

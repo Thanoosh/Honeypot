@@ -1,0 +1,31 @@
+# Dockerfile.core.base
+# ─────────────────────────────────────────────────────────────
+# BASE IMAGE — dependencies only
+# Only rebuild this when requirements.txt changes:
+#   docker compose build core-base
+#
+# This layer is cached permanently until packages change.
+# ─────────────────────────────────────────────────────────────
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+# System dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+# Python dependencies — this is the slow part, cached after first build
+COPY requirements.txt .
+RUN pip install --no-cache-dir \
+    flask \
+    requests \
+    scikit-learn \
+    numpy \
+    pandas \
+    pyyaml \
+    rich \
+    scipy \
+    joblib

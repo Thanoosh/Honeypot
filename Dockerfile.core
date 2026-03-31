@@ -1,0 +1,26 @@
+# Dockerfile.core
+# ─────────────────────────────────────────────────────────────
+# CODE IMAGE — builds on top of base, copies source only
+# Rebuild this on every code change — takes ~5 seconds:
+#   docker compose build core
+#
+# Only rebuild base when requirements.txt changes:
+#   docker build -f Dockerfile.core.base -t honeypot-base .
+# ─────────────────────────────────────────────────────────────
+
+FROM honeypot-base:latest
+
+WORKDIR /app
+
+# Copy source code — this is the only layer that changes day to day
+COPY core/        ./core/
+COPY behaviour/   ./behaviour/
+COPY forensics/   ./forensics/
+COPY ml/          ./ml/
+
+# Create data directories
+RUN mkdir -p data/logs data/ml data/pcaps
+
+EXPOSE 5001
+
+CMD ["python", "-m", "core.main"]

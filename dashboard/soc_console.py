@@ -1,3 +1,5 @@
+# dashboard/soc_console.py
+
 import streamlit as st
 import json
 import time
@@ -17,10 +19,13 @@ st.set_page_config(
 )
 
 LOG_FILE = Path("data/logs/events.log")
-CORE_API = "http://127.0.0.1:5001"
+
+# Use container name on Docker network, fallback to localhost for local dev
+import os
+CORE_API = os.environ.get("CORE_API", "http://127.0.0.1:5001")
 
 # =========================================================
-# CORE API HELPERS (OLD DASHBOARD STYLE)
+# CORE API HELPERS
 # =========================================================
 
 def api_get(path):
@@ -59,13 +64,14 @@ def parse_time(ts):
         return None
 
 # =========================================================
-# SIDEBAR — SERVICE CONTROLS (EXACT OLD LOGIC)
+# SIDEBAR — SERVICE CONTROLS
 # =========================================================
 
 st.sidebar.header("🎛 Honeypot Controls")
 
 # ---- HTTP ----
-http_running = api_get("/control/http/status").get("running", False)
+http_status = api_get("/control/http/status")
+http_running = http_status.get("running", False)
 
 if http_running:
     st.sidebar.success("HTTP Honeypot: RUNNING")
@@ -81,7 +87,8 @@ else:
 st.sidebar.divider()
 
 # ---- SSH ----
-ssh_running = api_get("/control/ssh/status").get("running", False)
+ssh_status = api_get("/control/ssh/status")
+ssh_running = ssh_status.get("running", False)
 
 if ssh_running:
     st.sidebar.success("SSH Honeypot: RUNNING")
@@ -93,6 +100,14 @@ else:
     if st.sidebar.button("▶ Start SSH"):
         api_post("/control/ssh/start")
         st.rerun()
+
+st.sidebar.divider()
+
+# ---- Core API status indicator ----
+if http_status:
+    st.sidebar.success("🟢 Core API: CONNECTED")
+else:
+    st.sidebar.error("🔴 Core API: UNREACHABLE")
 
 st.sidebar.divider()
 
@@ -115,7 +130,7 @@ tab_overview, tab_live, tab_attackers = st.tabs(
 )
 
 # =========================================================
-# OVERVIEW TAB (UNCHANGED)
+# OVERVIEW TAB
 # =========================================================
 
 with tab_overview:
@@ -145,48 +160,51 @@ with tab_overview:
     c4.metric("Confirmed", bc.get("CONFIRMED_ATTACK", 0))
 
     st.markdown("---")
-    st.line_chart(timeline)
-    st.bar_chart(bc)
+
+    if timeline:
+        st.subheader("📈 Event Rate")
+        st.line_chart(timeline)
+
+    if bc:
+        st.subheader("🧠 Behaviour Breakdown")
+        st.bar_chart(bc)
 
 # =========================================================
-# LIVE EVENTS TAB — FIXED (OLD LOGIC, NEW UI)
+# LIVE EVENTS TAB
 # =========================================================
 
 with tab_live:
     st.subheader("🧪 Live Events")
 
-    placeholder = st.empty()
-
     events = load_events()
 
-    with placeholder.container():
-        if not events:
-            st.info("Waiting for events…")
-        else:
-            rows = []
-            for e in reversed(events[-50:]):  # latest first
-                rows.append({
-                    "Time": e.get("timestamp"),
-                    "IP": e.get("details", {}).get("client_ip", "N/A"),
-                    "Event": e.get("event_type"),
-                    "Behaviour": e.get("behaviour"),
-                    "Attack": e.get("attack_type"),
-                    "_raw": e,
-                })
+    if not events:
+        st.info("Waiting for events… Start a honeypot service and trigger some traffic.")
+    else:
+        rows = []
+        for e in reversed(events[-50:]):
+            rows.append({
+                "Time": e.get("timestamp"),
+                "IP": e.get("details", {}).get("client_ip", "N/A"),
+                "Event": e.get("event_type"),
+                "Behaviour": e.get("behaviour"),
+                "Attack": e.get("attack_type"),
+                "_raw": e,
+            })
 
-            df = pd.DataFrame(rows)
+        df = pd.DataFrame(rows)
 
-            for _, row in df.iterrows():
-                with st.expander(
-                    f"{row['Time']} | {row['Event']} | {row['IP']} | {row['Behaviour']}"
-                ):
-                    st.json(row["_raw"])
+        for _, row in df.iterrows():
+            with st.expander(
+                f"{row['Time']} | {row['Event']} | {row['IP']} | {row['Behaviour']}"
+            ):
+                st.json(row["_raw"])
 
     time.sleep(refresh_interval)
     st.rerun()
 
 # =========================================================
-# ATTACKERS TAB (UNCHANGED)
+# ATTACKERS TAB
 # =========================================================
 
 with tab_attackers:
@@ -197,7 +215,7 @@ with tab_attackers:
             attackers[ip].append(e)
 
     if not attackers:
-        st.info("No attackers yet.")
+        st.info("No attackers detected yet.")
     else:
         ip = st.selectbox("Select Attacker IP", sorted(attackers.keys()))
         evts = attackers[ip]

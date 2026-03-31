@@ -1,0 +1,21 @@
+# Dockerfile.dashboard.base
+# ─────────────────────────────────────────────────────────────
+# BASE IMAGE — dashboard dependencies only
+# Only rebuild when requirements change:
+#   docker build -f Dockerfile.dashboard.base -t honeypot-dashboard-base .
+# ─────────────────────────────────────────────────────────────
+
+FROM python:3.10-slim
+
+WORKDIR /app
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt .
+RUN pip install --no-cache-dir \
+    streamlit \
+    pandas \
+    requests \
+    pyyaml
