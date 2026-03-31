@@ -16,11 +16,6 @@ app = Flask(__name__)
 
 # ─────────────────────────────────────────────
 # CONFIG
-# FIX #2: Use environment variable for core endpoint.
-# Inside Docker the service name is 'honeypot_core'.
-# For local dev without Docker, falls back to 127.0.0.1.
-# host.docker.internal only works on Docker Desktop (Windows/Mac),
-# NOT on Linux — so we remove that dependency entirely.
 # ─────────────────────────────────────────────
 
 CORE_EVENT_ENDPOINT = os.environ.get(
@@ -78,16 +73,22 @@ SCANNER_HEADERS = [
 
 # ─────────────────────────────────────────────
 # MITRE ATT&CK MAPPING
+#
+# FIX: Keys are now mitre_id and mitre_name — matching the
+# send_event() parameter names exactly.
+# Previously they were "id" and "name" which caused:
+#   TypeError: send_event() got an unexpected keyword argument 'id'
+# on every single route, crashing all requests before logging anything.
 # ─────────────────────────────────────────────
 
 MITRE_MAP = {
-    "SQL_INJECTION":    {"id": "T1190", "name": "Exploit Public-Facing Application"},
-    "XSS":              {"id": "T1059.007", "name": "JavaScript Execution"},
-    "PATH_TRAVERSAL":   {"id": "T1083", "name": "File and Directory Discovery"},
-    "RECON_SCAN":       {"id": "T1595.002", "name": "Vulnerability Scanning"},
-    "CRED_ACCESS":      {"id": "T1552.001", "name": "Credentials in Files"},
-    "BRUTE_FORCE":      {"id": "T1110", "name": "Brute Force"},
-    "KILL_CHAIN":       {"id": "T1078", "name": "Valid Accounts"},
+    "SQL_INJECTION":  {"mitre_id": "T1190",      "mitre_name": "Exploit Public-Facing Application"},
+    "XSS":            {"mitre_id": "T1059.007",  "mitre_name": "JavaScript Execution"},
+    "PATH_TRAVERSAL": {"mitre_id": "T1083",      "mitre_name": "File and Directory Discovery"},
+    "RECON_SCAN":     {"mitre_id": "T1595.002",  "mitre_name": "Vulnerability Scanning"},
+    "CRED_ACCESS":    {"mitre_id": "T1552.001",  "mitre_name": "Credentials in Files"},
+    "BRUTE_FORCE":    {"mitre_id": "T1110",      "mitre_name": "Brute Force"},
+    "KILL_CHAIN":     {"mitre_id": "T1078",      "mitre_name": "Valid Accounts"},
 }
 
 # ─────────────────────────────────────────────
@@ -113,8 +114,7 @@ def get_client_ip() -> str:
 def send_event(event_type: str, details: dict, mitre_id: str = "", mitre_name: str = "") -> dict:
     """
     Send event to Core API and return the enriched decision.
-    FIX #9: No longer silently swallows errors — prints a warning so
-    you can see in Docker logs if the core API is unreachable.
+    Prints a warning if core API is unreachable so it shows in Docker logs.
     """
     global SERVICE_MODE
     try:
@@ -151,7 +151,6 @@ def send_event(event_type: str, details: dict, mitre_id: str = "", mitre_name: s
 
 # ─────────────────────────────────────────────
 # FAKE SERVER HEADERS
-# Makes the server look like a real Apache/PHP stack
 # ─────────────────────────────────────────────
 
 @app.after_request
@@ -197,7 +196,6 @@ def login():
                 "username": username,
             }, **MITRE_MAP["SQL_INJECTION"])
 
-            # Deception — fake SQL error that leaks table info
             if SERVICE_MODE in ("DECEPTION", "FAKE_DB"):
                 error = "SQL Error: You have an error in your SQL syntax near 'users' at line 1. Table: novatech_users, Column: password_hash"
             else:
@@ -214,7 +212,7 @@ def login():
             error = "Invalid input detected."
             return render_template("login.html", error=error, username=username)
 
-        # Brute force — log all login attempts
+        # Normal login attempt — log as brute force
         send_event("HTTP_LOGIN_ATTEMPT", {
             "username": username,
             "endpoint": "/login",
@@ -253,8 +251,6 @@ def backup():
 
 @app.route("/backup/<filename>")
 def backup_file(filename):
-    """Serve fake backup files — Easter egg trail."""
-
     send_event("HTTP_BACKUP_FILE_ACCESS", {
         "endpoint": f"/backup/{filename}",
         "filename": filename,
@@ -307,11 +303,6 @@ INSERT INTO novatech_users VALUES
 
 @app.route("/.env")
 def env_file():
-    """
-    The crown jewel Easter egg.
-    Attacker finds this and gets SSH credentials.
-    This is the kill chain trigger.
-    """
     send_event("HTTP_ENV_FILE_ACCESS", {
         "endpoint": "/.env",
         "high_value": True,
@@ -357,10 +348,6 @@ STRIPE_SECRET=sk_live_FAKEKEY1234567890abcdefgh
 
 @app.route("/robots.txt")
 def robots():
-    """
-    Plants breadcrumbs for attackers.
-    Every good attacker checks robots.txt first.
-    """
     send_event("HTTP_ROBOTS_ACCESS", {
         "endpoint": "/robots.txt",
     }, **MITRE_MAP["RECON_SCAN"])
@@ -382,7 +369,6 @@ Allow: /login
 
 @app.route("/api/users")
 def api_users():
-    """Fake API endpoint — leaks user data."""
     send_event("HTTP_API_PROBE", {
         "endpoint": "/api/users",
         "high_value": True,
@@ -423,26 +409,24 @@ def search():
     if not query:
         return render_template("index.html")
 
-    combined = query
-
-    if detect_sqli(combined):
+    if detect_sqli(query):
         send_event("HTTP_SQLI_ATTEMPT", {
             "endpoint": "/search",
-            "payload": combined,
+            "payload": query,
         }, **MITRE_MAP["SQL_INJECTION"])
         return jsonify({"error": "Search error: syntax error in query"}), 500
 
-    if detect_xss(combined):
+    if detect_xss(query):
         send_event("HTTP_XSS_ATTEMPT", {
             "endpoint": "/search",
-            "payload": combined,
+            "payload": query,
         }, **MITRE_MAP["XSS"])
         return jsonify({"results": [], "query": query})
 
-    if detect_path_traversal(combined):
+    if detect_path_traversal(query):
         send_event("HTTP_PATH_TRAVERSAL", {
             "endpoint": "/search",
-            "payload": combined,
+            "payload": query,
         }, **MITRE_MAP["PATH_TRAVERSAL"])
         return jsonify({"error": "Invalid search query"}), 400
 
@@ -462,7 +446,6 @@ def download():
     return jsonify({"error": "File not found"}), 404
 
 
-# Catch all unknown paths — log directory scanning
 @app.route("/<path:path>")
 def catch_all(path):
     send_event("HTTP_UNKNOWN_PATH", {
