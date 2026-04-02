@@ -8,6 +8,9 @@ from behaviour.response_engine import ResponseEngine
 
 class BehaviourClassifier:
     # States
+    NEW = "NEW"
+    PROBING = "PROBING"
+    SUSPICIOUS = "SUSPICIOUS"
     MALICIOUS = "MALICIOUS"
     CONFIRMED_ATTACK = "CONFIRMED_ATTACK"
     KILL_CHAIN_CONFIRMED = "KILL_CHAIN_CONFIRMED"

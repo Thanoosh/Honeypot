@@ -87,10 +87,9 @@ services:
       - honeypot_net
     environment:
       - PYTHONUNBUFFERED=1
-      - CORE_API=http://172.18.0.2:5001   # ✅ FIX (DIRECT IP)
+      - CORE_API=http://honeypot_core:5001   # ✅ FIX (SERVICE NAME)
     depends_on:
-      core:
-        condition: service_healthy
+      - core
 
   # ── HTTP HONEYPOT IMAGE (pre-built, not auto-started) ──
   honeypot_http_image:

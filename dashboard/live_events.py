@@ -121,7 +121,7 @@ def render_live_events():
 
     st.dataframe(
         styled,
-        use_container_width=True,
+        width="stretch",
         height=450,
     )
 

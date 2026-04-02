@@ -289,10 +289,10 @@ with st.sidebar:
         col1, col2 = st.columns([3, 1], vertical_alignment="center")
         col1.write(f"**{name}**")
         if is_running:
-            if col2.button("OFF", key=f"stop_{name.lower()}", use_container_width=True):
+            if col2.button("OFF", key=f"stop_{name.lower()}", width="stretch"):
                 api_post(f"/control/{path}/stop"); st.rerun()
         else:
-            if col2.button("ON", key=f"start_{name.lower()}", use_container_width=True):
+            if col2.button("ON", key=f"start_{name.lower()}", width="stretch"):
                 api_post(f"/control/{path}/start"); st.rerun()
 
     http_running = core_status.get("running", False) if core_status else False
@@ -360,7 +360,7 @@ while True:
             if not df.empty:
                 df['dt'] = pd.to_datetime(df['timestamp'])
                 df_trend = df.resample('1min', on='dt').size().rename("inter")
-                st.area_chart(df_trend, height=250, use_container_width=True)
+                st.area_chart(df_trend, height=250, width="stretch")
             else:
                 st.info("Awaiting telemetry...")
 
@@ -369,7 +369,7 @@ while True:
             if not df.empty:
                 counts = df['behaviour'].value_counts()
                 # Horizontal bar chart prevents label overlap
-                st.bar_chart(counts, height=250, use_container_width=True, horizontal=True)
+                st.bar_chart(counts, height=250, width="stretch", horizontal=True)
             else:
                 st.info("Awaiting behavior patterns...")
 
@@ -391,7 +391,7 @@ while True:
             }).sort_values('risk_score', ascending=False)
             
             ip_stats.columns = ["Current Status", "Peak Risk", "Hits"]
-            st.dataframe(ip_stats, use_container_width=True)
+            st.dataframe(ip_stats, width="stretch")
         else:
             st.info("No malicious profiles identified yet.")
 

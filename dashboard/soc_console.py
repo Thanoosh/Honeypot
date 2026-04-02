@@ -21,7 +21,7 @@ st.set_page_config(
 
 LOG_FILE = Path("data/logs/events.log")
 
-CORE_API = os.environ.get("CORE_API", "http://127.0.0.1:5001")
+CORE_API = os.environ.get("CORE_API", "http://honeypot_core:5001")
 
 BEHAVIOUR_COLORS = {
     "NEW":                  "#6c757d",
@@ -95,10 +95,8 @@ def colour_behaviour_column(series):
 
 def show_dataframe(df_or_styled, height=None):
     kwargs = {"height": height} if height else {}
-    try:
-        st.dataframe(df_or_styled, width="stretch", **kwargs)
-    except TypeError:
-        st.dataframe(df_or_styled, use_container_width=True, **kwargs)
+    # Use modern width='stretch' to avoid deprecation warnings
+    st.dataframe(df_or_styled, width="stretch", **kwargs)
 
 # =========================================================
 # SIDEBAR — SERVICE CONTROLS

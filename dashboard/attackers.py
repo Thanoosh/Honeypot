@@ -136,7 +136,7 @@ def render_attackers():
 
     st.dataframe(
         df.drop(columns=["_raw"]),
-        use_container_width=True,
+        width="stretch",
         height=450,
     )
 

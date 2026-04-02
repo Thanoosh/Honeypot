@@ -3,6 +3,7 @@
 import os
 import joblib
 import pandas as pd
+import threading
 from transformers import pipeline
 from typing import Dict, Any
 
@@ -15,12 +16,10 @@ class AttackIntentClassifier:
     """
 
     def __init__(self):
-        # 1. Zero-shot model (Stage 2)
-        print("[ML] Loading Zero-shot Transformer model (Stage 2)...")
-        self.zero_shot = pipeline(
-            task="zero-shot-classification",
-            model="facebook/bart-large-mnli",
-        )
+        # 1. Zero-shot model (Stage 2) - Load in background
+        self.zero_shot = None
+        print("[ML] Starting background load for Zero-shot DistilBART model (Stage 2)...")
+        threading.Thread(target=self._load_model, daemon=True).start()
 
         # 2. Scikit-learn model (Stage 1)
         self.fast_model = None
@@ -40,6 +39,16 @@ class AttackIntentClassifier:
             "Reconnaissance",
             "Benign",
         ]
+
+    def _load_model(self):
+        try:
+            self.zero_shot = pipeline(
+                task="zero-shot-classification",
+                model="valhalla/distilbart-mnli-12-1",
+            )
+            print("[ML] ✅ Zero-shot DistilBART model fully loaded and ready!")
+        except Exception as e:
+            print(f"[ML] ❌ Error loading DistilBART: {e}")
 
     def classify(self, text: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
         """
@@ -81,6 +90,15 @@ class AttackIntentClassifier:
                 }
 
         # --- STAGE 2: Deep Intent Classification (Zero-shot) ---
+        if self.zero_shot is None:
+            print(f"[ML] Deep analysis skipped (model still loading) for: {text[:50]}...")
+            return {
+                "attack_type": "UNKNOWN (Model Loading)",
+                "confidence": fast_confidence if is_anomalous else 0.0,
+                "fast_path": True,
+                "model": "scikit-learn (fallback)"
+            }
+
         print(f"[ML] Performing deep analysis on: {text[:50]}...")
         result = self.zero_shot(
             text,
