@@ -130,7 +130,12 @@ def send_event(event_type: str, details: dict, mitre_id: str = "", mitre_name: s
             "mitre_technique_id": mitre_id,
             "mitre_technique_name": mitre_name,
         }
-        resp = requests.post(CORE_EVENT_ENDPOINT, json=payload, timeout=3)
+        resp = requests.post(
+            CORE_EVENT_ENDPOINT,
+            json=payload,
+            timeout=3,
+            headers={"Host": "localhost:5001"}
+        )
         if resp.ok:
             result = resp.json()
             response = result.get("response", {})

@@ -237,7 +237,7 @@ def pick_event_type(profile_name: str) -> str:
 # CORE API COMMUNICATION
 # ─────────────────────────────────────────────
 
-def wait_for_core(max_retries: int = 10, delay: int = 3):
+def wait_for_core(max_retries: int = 50, delay: int = 3):
     """Wait until the core API is reachable before sending events."""
     print(f"[SYNTHETIC] Waiting for core API at {CORE_EVENT_API}...")
 
@@ -264,7 +264,7 @@ def send_event(event: dict) -> bool:
     """Send a single event to the core API. Returns True on success."""
     try:
         payload = {**event, "synthetic": True}
-        r = requests.post(CORE_EVENT_API, json=payload, timeout=3)
+        r = requests.post(CORE_EVENT_API, json=payload, timeout=30)
         return r.status_code == 200
     except Exception:
         return False

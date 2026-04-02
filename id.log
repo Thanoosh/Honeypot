@@ -1,0 +1,2 @@
+nohup: ignoring input
+uid=1000(hemanth) gid=128(docker) groups=128(docker),4(adm),24(cdrom),27(sudo),30(dip),46(plugdev),100(users),114(lpadmin),126(wireshark),1000(hemanth)

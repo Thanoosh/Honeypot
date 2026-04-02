@@ -113,6 +113,9 @@ class Orchestrator:
             return
 
         print("[ORCH] Starting SSH honeypot...")
+        # Use host-side data path if provided (for Docker-outside-Docker volume mapping)
+        data_dir = os.environ.get("DATA_DIR_HOST", self.DATA_DIR)
+
         r = subprocess.run(
             [
                 "docker", "run",
@@ -122,7 +125,7 @@ class Orchestrator:
                 "--network", self.NETWORK,
                 "--add-host", "host.docker.internal:host-gateway",
                 "-e", f"CORE_API={self.CORE_API_FOR_CONTAINERS}",
-                "-v", f"{self.DATA_DIR}:/app/data",
+                "-v", f"{data_dir}:/app/data",
                 "-p", "0.0.0.0:2222:2222",
                 "honeypot_ssh_image",
             ],

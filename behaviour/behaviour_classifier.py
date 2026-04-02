@@ -7,15 +7,9 @@ from behaviour.response_engine import ResponseEngine
 
 
 class BehaviourClassifier:
-    NEW = "NEW"
-    PROBING = "PROBING"
-    SUSPICIOUS = "SUSPICIOUS"
+    # States
     MALICIOUS = "MALICIOUS"
     CONFIRMED_ATTACK = "CONFIRMED_ATTACK"
-
-    # FIX #7: KILL_CHAIN_CONFIRMED is now a proper class constant
-    # so the dashboard, response engine, and all other modules
-    # can reference BehaviourClassifier.KILL_CHAIN_CONFIRMED
     KILL_CHAIN_CONFIRMED = "KILL_CHAIN_CONFIRMED"
 
     # Priority order used for escalation comparisons
@@ -118,6 +112,7 @@ class BehaviourClassifier:
                 "to": new_state,
                 "reasons": reasons,
             },
+            "services": list(attacker["services"]), # convert set to list for JSON serialization
         }
 
     # ── STATE TRANSITIONS ───────────────────────────────────────
@@ -130,7 +125,7 @@ class BehaviourClassifier:
     def _transition(self, attacker):
         reasons = []
 
-        # Kill chain always wins — absolute highest state
+        # Most severe first — Kill chain always wins
         if attacker["ssh_kill_chain"]:
             reasons.append("kill chain confirmed — HTTP recon led to SSH access")
             return self.KILL_CHAIN_CONFIRMED, reasons
@@ -140,9 +135,9 @@ class BehaviourClassifier:
             reasons.append("persistent high-risk attacker")
             return self.CONFIRMED_ATTACK, reasons
 
-        # Malicious — repeated attacks OR high risk score
+        # Malicious — repeated malicious behaviour
         if attacker["malicious_events"] >= 3 or attacker["risk"] > 6:
-            reasons.append("repeated malicious behaviour or high risk score")
+            reasons.append("repeated malicious behaviour")
             return self.MALICIOUS, reasons
 
         # Suspicious — first malicious event detected
@@ -150,13 +145,13 @@ class BehaviourClassifier:
             reasons.append("malicious event detected")
             return self.SUSPICIOUS, reasons
 
-        # Probing — multiple interactions but nothing malicious yet
-        if attacker["events"] >= 2 and attacker["state"] == self.NEW:
-            reasons.append("multiple interactions observed")
+        # Probing — multiple interactions
+        if attacker["events"] >= 2:
+            reasons.append("multiple interactions")
             return self.PROBING, reasons
 
         # No change
         return attacker["state"], ["no escalation triggered"]
 
     def _extract_ip(self, event):
-        return event.get("details", {}).get("client_ip") or "UNKNOWN"
+        return event.get("details", {}).get("client_ip") or event.get("client_ip") or "UNKNOWN"

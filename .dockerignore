@@ -1,0 +1,21 @@
+# Sensitive keys — must never be baked into images
+data/ssh_host_rsa_key
+data/ssh_host_rsa_key.pub
+data/*.key
+data/*.pem
+
+# Git history
+.git
+
+# Python virtualenv (large, not needed in container)
+.venv
+
+# Logs & PID files
+*.log
+*.pid
+
+# Local build artifacts
+__pycache__
+*.pyc
+*.pyo
+.pytest_cache

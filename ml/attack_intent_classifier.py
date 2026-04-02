@@ -1,7 +1,12 @@
 # ml/attack_intent_classifier.py
 
+import os
+import joblib
+import pandas as pd
 from transformers import pipeline
-from typing import Dict
+from typing import Dict, Any
+
+MODEL_PATH = "ml/models/csic_model.joblib"
 
 
 class AttackIntentClassifier:
@@ -10,10 +15,20 @@ class AttackIntentClassifier:
     """
 
     def __init__(self):
-        self.classifier = pipeline(
+        # 1. Zero-shot model (Stage 2)
+        print("[ML] Loading Zero-shot Transformer model (Stage 2)...")
+        self.zero_shot = pipeline(
             task="zero-shot-classification",
             model="facebook/bart-large-mnli",
         )
+
+        # 2. Scikit-learn model (Stage 1)
+        self.fast_model = None
+        if os.path.exists(MODEL_PATH):
+            print(f"[ML] Loading fast Scikit-learn model from {MODEL_PATH} (Stage 1)...")
+            self.fast_model = joblib.load(MODEL_PATH)
+        else:
+            print(f"[ML] WARN: {MODEL_PATH} not found. Running in Zero-shot only mode.")
 
         # Canonical security labels
         self.labels = [
@@ -26,25 +41,67 @@ class AttackIntentClassifier:
             "Benign",
         ]
 
-    def classify(self, text: str) -> Dict[str, float]:
+    def classify(self, text: str, context: Dict[str, Any] = None) -> Dict[str, Any]:
+        """
+        Hybrid classification: fast Sklearn check followed by deep Zero-shot analysis.
+        """
         if not text or not text.strip():
-            return {"attack_type": "BENIGN", "confidence": 0.0}
+            return {
+                "attack_type": "BENIGN",
+                "confidence": 0.0,
+                "fast_path": True,
+                "model": "rule-engine"
+            }
 
-        result = self.classifier(
+        # --- STAGE 1: Fast Anomaly Detection (Sklearn) ---
+        is_anomalous = False
+        fast_confidence = 0.0
+
+        if self.fast_model and context and "method" in context:
+            # Construct DataFrame for the pipeline
+            df = pd.DataFrame([{
+                "method": context.get("method", "GET"),
+                "url": context.get("url", text if context.get("method") == "GET" else ""),
+                "content": context.get("content", text if context.get("method") == "POST" else "")
+            }])
+            
+            # Predict
+            pred = self.fast_model.predict(df)[0]
+            probs = self.fast_model.predict_proba(df)[0]
+            is_anomalous = (pred == 1)
+            fast_confidence = float(max(probs))
+
+            # If it's definitely normal, we can return early (Fast Path)
+            if not is_anomalous and fast_confidence > 0.9:
+                return {
+                    "attack_type": "BENIGN",
+                    "confidence": fast_confidence,
+                    "fast_path": True,
+                    "model": "scikit-learn"
+                }
+
+        # --- STAGE 2: Deep Intent Classification (Zero-shot) ---
+        print(f"[ML] Performing deep analysis on: {text[:50]}...")
+        result = self.zero_shot(
             text,
             candidate_labels=self.labels,
             multi_label=False,
         )
 
         raw_label = result["labels"][0]
-        confidence = float(result["scores"][0])
+        deep_confidence = float(result["scores"][0])
 
-        # 🔑 SECURITY NORMALIZATION
+        # Security Normalization
         attack_type = self._normalize_label(raw_label, text)
+        
+        # Combine confidences if both models agreed
+        final_confidence = max(deep_confidence, fast_confidence) if is_anomalous else deep_confidence
 
         return {
             "attack_type": attack_type,
-            "confidence": confidence,
+            "confidence": round(final_confidence, 4),
+            "fast_path": False,
+            "model": "hybrid (sk + zero-shot)"
         }
 
     def _normalize_label(self, label: str, text: str) -> str:

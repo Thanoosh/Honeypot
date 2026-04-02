@@ -72,6 +72,9 @@ class ResponseEngine:
         if behaviour in ("NEW", "PROBING"):
             return self._slowdown("Generic suspicious activity", delay=1)
 
+        if behaviour in ("AUTOMATED_ATTACK", "PERSISTENT_ATTACKER", "KILL_CHAIN_CONFIRMED"):
+             return self._contain(f"Confirmed {behaviour}")
+
         return self._contain("Confirmed attack")
 
     # ---------------- RESPONSE BUILDERS ----------------

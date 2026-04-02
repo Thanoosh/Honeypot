@@ -21,8 +21,8 @@ import os
 CORE_EVENT_ENDPOINT = os.environ.get(
     "CORE_API", "http://host.docker.internal:5001"
 ) + "/event"
-
 SSH_PORT = 2222
+KEY_PATH = "/app/data/ssh_host_rsa_key"
 
 # Believable hostname — does NOT say "honeypot"
 HOSTNAME = "prod-web-01"
@@ -375,7 +375,12 @@ def send_event(event_type: str, details: dict, high_value: bool = False):
             "event_type": event_type,
             "details": {**details, "high_value": high_value},
         }
-        requests.post(CORE_EVENT_ENDPOINT, json=payload, timeout=5)
+        requests.post(
+            CORE_EVENT_ENDPOINT,
+            json=payload,
+            timeout=5,
+            headers={"Host": "localhost:5001"}
+        )
     except Exception:
         pass
 

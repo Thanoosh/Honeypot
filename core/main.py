@@ -1,8 +1,11 @@
 from flask import Flask, request, jsonify
 from datetime import datetime, timezone
 from werkzeug.middleware.proxy_fix import ProxyFix
+from core.orchestrator import Orchestrator
+from core.alert_manager import AlertManager
 from forensics.logger import CentralLogger
 from behaviour.behaviour_classifier import BehaviourClassifier
+from ml.attack_intent_classifier import AttackIntentClassifier
 
 # ✅ Create app
 app = Flask(__name__)
@@ -15,7 +18,9 @@ app.url_map.host_matching = False
 app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_host=1)
 
 logger = CentralLogger()
-classifier = BehaviourClassifier()
+behaviour_classifier = BehaviourClassifier()
+intent_classifier = AttackIntentClassifier()
+alert_manager = AlertManager()
 
 # ─────────────────────────────────────────────
 # ORCHESTRATOR
@@ -47,7 +52,20 @@ def receive_event():
     if not event or "event_type" not in event:
         return jsonify({"error": "invalid event"}), 400
 
-    result = classifier.process_event(event)
+    # ML ENRICHMENT (Stage 1 & 2)
+    details = event.get("details", {})
+    payload = details.get("payload", details.get("command", ""))
+    
+    # Run hybrid classifier if context is available
+    ml_result = intent_classifier.classify(payload, context=details)
+    
+    # Merge ML insights into event
+    event["attack_type"] = ml_result.get("attack_type", "BENIGN")
+    event["confidence"] = ml_result.get("confidence", 0.0)
+    event["ml_model"] = ml_result.get("model", "rule-engine")
+    event["fast_path"] = ml_result.get("fast_path", True)
+
+    result = behaviour_classifier.process_event(event)
 
     enriched = {
         **event,
@@ -62,6 +80,7 @@ def receive_event():
     }
 
     logger.log(enriched)
+    alert_manager.process(enriched)
     return jsonify(enriched), 200
 
 # ─────────────────────────────────────────────

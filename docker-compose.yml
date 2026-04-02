@@ -53,6 +53,7 @@ services:
     ports:
       - "5001:5001"
     volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
       - ./data/logs:/app/data/logs
       - ./data/ml:/app/data/ml
       # Docker socket — required for Start/Stop honeypot buttons
@@ -61,12 +62,14 @@ services:
       - honeypot_net
     environment:
       - PYTHONUNBUFFERED=1
+      - DATA_DIR_HOST=${PWD}/data
+      - HF_HOME=/app/data/ml/huggingface
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5001/control/http/status"]
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 10s
+      start_period: 300s
 
   # ── DASHBOARD ─────────────────────────────
   dashboard:
@@ -106,3 +109,39 @@ services:
     image: honeypot_ssh_image
     profiles:
       - build_only
+
+  # ── CLOUDFLARE TUNNEL: HTTP TRAP ──────────────────
+  tunnel-http:
+    image: cloudflare/cloudflared:latest
+    container_name: tunnel_http
+    restart: unless-stopped
+    command: tunnel --url http://honeypot_http:8080 --no-autoupdate
+    networks:
+      - honeypot_net
+    depends_on:
+      - core
+
+  # ── CLOUDFLARE TUNNEL: DASHBOARD ───────────────────
+  tunnel-dash:
+    image: cloudflare/cloudflared:latest
+    container_name: tunnel_dash
+    restart: unless-stopped
+    command: tunnel --url http://honeypot_dashboard:8501 --no-autoupdate
+    networks:
+      - honeypot_net
+    depends_on:
+      - dashboard
+
+  # ── BORE TUNNEL: SSH TRAP ──────────────────────────
+  tunnel-ssh:
+    image: alpine:latest
+    container_name: tunnel_ssh
+    restart: unless-stopped
+    volumes:
+      - .:/app
+    working_dir: /app
+    entrypoint: /bin/sh -c "./bore local 2222 --to bore.pub"
+    networks:
+      - honeypot_net
+    depends_on:
+      - core
