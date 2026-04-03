@@ -1,5 +1,8 @@
 # docker-compose.yml
-# Behaviour-Aware Honeypot — One-command startup
+# Behaviour-Aware Honeypot — One-command startup  (AI-Core Enabled)
+#
+# AWS MIGRATION: Run exactly the same commands on an EC2 instance.
+#   Recommended instance: t3.xlarge (4 vCPU, 16 GB)  or  t3.large (8 GB Eco-Mode)
 #
 # ─────────────────────────────────────────────
 # FIRST TIME (or full rebuild):
@@ -144,3 +147,25 @@ services:
       - honeypot_net
     depends_on:
       - core
+
+  # ── OLLAMA (Local LLM — AI Maneuvering Engine) ───────
+  # Runs Phi-3-mini locally. No API keys required.
+  # On AWS: models are persisted in the named volume below.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: honeypot_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - honeypot_net
+    deploy:
+      resources:
+        limits:
+          memory: 4G   # Capped so it never consumes all RAM
+
+volumes:
+  ollama_models:
+    driver: local

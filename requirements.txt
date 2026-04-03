@@ -11,4 +11,4 @@ paramiko
 torch
 sentence-transformers
 ollama
-oauthlib
+psutil
