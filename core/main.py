@@ -119,6 +119,18 @@ def http_status():
         return jsonify({"running": False, "docker_available": False, "error": str(e)}), 200
 
 # ─────────────────────────────────────────────
+# TUNNEL CONTROLS
+# ─────────────────────────────────────────────
+@app.route("/control/tunnels", methods=["GET"])
+def get_tunnels():
+    if not ORCHESTRATOR_OK:
+        return jsonify({"error": "Docker not available"}), 503
+    try:
+        return jsonify(orchestrator.get_tunnels()), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+# ─────────────────────────────────────────────
 # SSH CONTROLS
 # ─────────────────────────────────────────────
 @app.route("/control/ssh/start", methods=["POST"])

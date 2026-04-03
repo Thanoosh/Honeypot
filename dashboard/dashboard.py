@@ -327,7 +327,7 @@ with top_col2:
         st.error(f"⚠️ **CHAIN:** {msg}")
 
 # Main Tabs for SOC Layout
-tab1, tab2, tab3 = st.tabs(["📊 Live Surveillance", "🕵️ Attacker Intel", "📜 Forensic Feed"])
+tab1, tab2, tab3, tab4 = st.tabs(["📊 Live Surveillance", "🕵️ Attacker Intel", "📜 Forensic Feed", "🌐 Public Connectivity"])
 
 while True:
     events = load_events()
@@ -431,6 +431,31 @@ while True:
                     st.json(event)
         else:
             st.info("Audit log empty. Deploy traps to begin ingestion.")
+
+    # --- Tab 4: Public Connectivity ---
+    with tab4:
+        st.subheader("🌐 Live Tunnels")
+        st.info("These securely tunnel your isolated system to the internet via Cloudflare and Bore.")
+        if st.button("🔄 Refresh Tunnel Links", key="refresh_tunn"):
+            pass # Button click will trigger a st.rerun naturally
+            
+        tunnels = api_get("/control/tunnels")
+        if tunnels:
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.markdown("### 🛡️ Dashboard (Control)")
+                dash_url = tunnels.get("dashboard")
+                st.code(dash_url if dash_url else "Pending...")
+            with c2:
+                st.markdown("### 🕸️ HTTP Trap (Web)")
+                http_url = tunnels.get("http_trap")
+                st.code(http_url if http_url else "Pending...")
+            with c3:
+                st.markdown("### 🔑 SSH Trap (Console)")
+                ssh_url = tunnels.get("ssh_trap")
+                st.code(f"ssh root@{ssh_url}" if ssh_url else "Pending...")
+        else:
+            st.warning("Awaiting Core API for tunnel URLs...")
 
     # This dummy container approach handles the refresh
     time.sleep(refresh_rate)

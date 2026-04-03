@@ -8,3 +8,7 @@ rich
 scipy
 joblib
 paramiko
+torch
+sentence-transformers
+ollama
+oauthlib

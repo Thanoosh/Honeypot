@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import re
 
 
 class Orchestrator:
@@ -57,6 +58,34 @@ class Orchestrator:
             capture_output=True, text=True,
         )
         return name in r.stdout.strip().splitlines()
+
+    def _extract_trycloudflare(self, container_name: str) -> str:
+        try:
+            r = subprocess.run(["docker", "logs", container_name], capture_output=True, text=True, timeout=5)
+            urls = re.findall(r"https://[a-zA-Z0-9-]+\.trycloudflare\.com", r.stdout + " " + r.stderr)
+            if urls:
+                return urls[-1]
+        except Exception as e:
+            print(f"[ORCH] Error fetching logs for {container_name}: {e}")
+        return None
+
+    def _extract_bore(self, container_name: str) -> str:
+        try:
+            r = subprocess.run(["docker", "logs", container_name], capture_output=True, text=True, timeout=5)
+            matches = re.findall(r"listening at ([^\s]+)", r.stdout + " " + r.stderr)
+            if matches:
+                return matches[-1]
+        except Exception as e:
+            print(f"[ORCH] Error fetching logs for {container_name}: {e}")
+        return None
+
+    def get_tunnels(self) -> dict:
+        return {
+            "dashboard": self._extract_trycloudflare("tunnel_dash"),
+            "http_trap": self._extract_trycloudflare("tunnel_http"),
+            "ssh_trap": self._extract_bore("tunnel_ssh")
+        }
+
 
     # ─────────────────────────────────────────────
     # HTTP HONEYPOT
