@@ -1,0 +1,80 @@
+{% extends "base.html" %} {% block title %}Login — NovaTech Employee Portal{%
+endblock %} {% block content %}
+
+<section class="auth-section">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <span class="logo-icon">⬡</span>
+      <span>NovaTech</span>
+    </div>
+    <h2>Employee Portal Login</h2>
+    <p class="auth-sub">Sign in with your NovaTech credentials</p>
+
+    {% if error %}
+    <div class="alert alert-error">
+      <span class="alert-icon">⚠</span>
+      <span>{{ error }}</span>
+    </div>
+    {% endif %}
+
+    <form method="POST" action="/login" class="auth-form">
+      <div class="form-group">
+        <label for="username">Username or Email</label>
+        <input
+          type="text"
+          id="username"
+          name="username"
+          value="{{ username }}"
+          placeholder="Enter your username"
+          autocomplete="username"
+          required
+        />
+      </div>
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input
+          type="password"
+          id="password"
+          name="password"
+          placeholder="Enter your password"
+          autocomplete="current-password"
+          required
+        />
+      </div>
+      <div class="form-options">
+        <label class="checkbox-label">
+          <input type="checkbox" name="remember" /> Remember me
+        </label>
+        <a href="#" class="forgot-link">Forgot password?</a>
+      </div>
+      <button type="submit" class="btn-primary btn-full">Sign In</button>
+    </form>
+
+    <div class="auth-footer">
+      <p>
+        Having trouble? Contact
+        <a href="mailto:it@novatech.internal">it@novatech.internal</a>
+      </p>
+      <p class="auth-note">
+        This system is for authorised NovaTech employees only.<br />
+        Unauthorised access is monitored and logged.
+      </p>
+    </div>
+  </div>
+
+  <div class="auth-side">
+    <h3>Secure Employee Access</h3>
+    <ul class="auth-features">
+      <li>✓ Access internal tools and dashboards</li>
+      <li>✓ Manage cloud resources</li>
+      <li>✓ View deployment status</li>
+      <li>✓ Submit and track support tickets</li>
+    </ul>
+    <div class="security-badge">
+      <span>🔒 256-bit TLS encryption</span>
+      <span>🛡 SOC 2 Type II certified</span>
+    </div>
+  </div>
+</section>
+
+{% endblock %}

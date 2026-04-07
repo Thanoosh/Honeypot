@@ -1,0 +1,65 @@
+{% extends "base.html" %} {% block title %}/backup — NovaTech File Server{%
+endblock %} {% block content %}
+
+<section class="filelisting-section">
+  <div class="filelisting-card">
+    <div class="filelisting-header">
+      <h2>Index of /backup</h2>
+      <p class="server-info">
+        Apache/2.4.41 (Ubuntu) Server at prod-web-01.novatech.internal Port 8080
+      </p>
+    </div>
+
+    <table class="file-table">
+      <thead>
+        <tr>
+          <th>Name</th>
+          <th>Last Modified</th>
+          <th>Size</th>
+          <th>Description</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr class="file-parent">
+          <td><a href="/">../</a></td>
+          <td>-</td>
+          <td>-</td>
+          <td>Parent Directory</td>
+        </tr>
+        <tr>
+          <td><a href="/backup/db_backup_nov.sql">db_backup_nov.sql</a></td>
+          <td>2024-11-01 02:00</td>
+          <td>847K</td>
+          <td>Production DB backup</td>
+        </tr>
+        <tr>
+          <td><a href="/backup/db_backup_oct.sql">db_backup_oct.sql</a></td>
+          <td>2024-10-01 02:00</td>
+          <td>821K</td>
+          <td>Production DB backup</td>
+        </tr>
+        <tr>
+          <td>
+            <a href="/backup/config_backup.tar.gz">config_backup.tar.gz</a>
+          </td>
+          <td>2024-10-28 14:32</td>
+          <td>12K</td>
+          <td>App config archive</td>
+        </tr>
+        <tr class="highlight-row">
+          <td><a href="/backup/server_info.txt">server_info.txt</a></td>
+          <td>2024-11-03 09:15</td>
+          <td>312</td>
+          <td>Server access info</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <p class="filelisting-note">
+      This directory should not be publicly accessible.<br />
+      Please raise ticket with ops team to restrict access.
+    </p>
+  </div>
+</section>
+
+{% endblock %}

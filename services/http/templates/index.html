@@ -1,0 +1,134 @@
+{% extends "base.html" %} {% block title %}NovaTech Solutions — Enterprise Cloud
+Infrastructure{% endblock %} {% block content %}
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-content">
+    <div class="hero-badge">Trusted by 500+ enterprises</div>
+    <h1>
+      Enterprise Infrastructure<br /><span class="accent">Built for Scale</span>
+    </h1>
+    <p class="hero-sub">
+      NovaTech delivers cloud-native solutions for modern businesses. From
+      secure data pipelines to real-time analytics — we power the infrastructure
+      that powers you.
+    </p>
+    <div class="hero-actions">
+      <a href="/portal" class="btn-primary">Access Portal</a>
+      <a href="/login" class="btn-secondary">Employee Login</a>
+    </div>
+    <div class="hero-stats">
+      <div class="stat">
+        <span class="stat-num">99.9%</span
+        ><span class="stat-label">Uptime SLA</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num">500+</span
+        ><span class="stat-label">Enterprise Clients</span>
+      </div>
+      <div class="stat">
+        <span class="stat-num">47</span
+        ><span class="stat-label">Data Centres</span>
+      </div>
+    </div>
+  </div>
+  <div class="hero-visual">
+    <div class="server-card">
+      <div class="server-header">
+        <span class="server-dot green"></span>
+        <span class="server-dot yellow"></span>
+        <span class="server-dot red"></span>
+        <span class="server-title">prod-web-01 — system status</span>
+      </div>
+      <div class="server-body">
+        <div class="server-line">
+          <span class="key">hostname</span
+          ><span class="val">prod-web-01.novatech.internal</span>
+        </div>
+        <div class="server-line">
+          <span class="key">uptime </span><span class="val">47 days, 3:42</span>
+        </div>
+        <div class="server-line">
+          <span class="key">load </span><span class="val">0.12 0.08 0.05</span>
+        </div>
+        <div class="server-line">
+          <span class="key">services</span
+          ><span class="val">nginx ● postgres ● redis</span>
+        </div>
+        <div class="server-line">
+          <span class="key">ssh </span
+          ><span class="val">port 2222 — restricted</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- FEATURES -->
+<section class="features">
+  <div class="section-container">
+    <h2 class="section-title">What We Build</h2>
+    <p class="section-sub">
+      Our platform handles the complexity so your team can focus on growth.
+    </p>
+    <div class="feature-grid">
+      <div class="feature-card">
+        <div class="feature-icon">🔒</div>
+        <h3>SecureOps</h3>
+        <p>
+          End-to-end encrypted data pipelines with zero-trust architecture and
+          real-time threat monitoring.
+        </p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">☁️</div>
+        <h3>CloudSync</h3>
+        <p>
+          Multi-region cloud synchronisation with automatic failover and 99.9%
+          uptime guarantee.
+        </p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">📊</div>
+        <h3>DataVault</h3>
+        <p>
+          Secure storage and backup solutions with automated scheduling and
+          compliance reporting.
+        </p>
+      </div>
+      <div class="feature-card">
+        <div class="feature-icon">⚡</div>
+        <h3>RealTime Analytics</h3>
+        <p>
+          Stream processing at scale. Monitor millions of events per second with
+          sub-millisecond latency.
+        </p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- CLIENTS -->
+<section class="clients">
+  <div class="section-container">
+    <p class="clients-label">Trusted by industry leaders</p>
+    <div class="client-logos">
+      <span class="client-logo">FinanceCore</span>
+      <span class="client-logo">HealthNet</span>
+      <span class="client-logo">RetailMax</span>
+      <span class="client-logo">LogisTech</span>
+      <span class="client-logo">EduSphere</span>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <div class="section-container">
+    <h2>Ready to modernise your infrastructure?</h2>
+    <p>Access the employee portal or contact our team.</p>
+    <a href="/portal" class="btn-primary">Go to Portal</a>
+  </div>
+</section>
+
+{% endblock %}

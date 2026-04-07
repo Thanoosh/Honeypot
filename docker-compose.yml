@@ -1,0 +1,181 @@
+# docker-compose.yml
+# Behaviour-Aware Honeypot — One-command startup  (AI-Core Enabled)
+#
+# AWS MIGRATION: Run exactly the same commands on an EC2 instance.
+#   Recommended instance: t3.xlarge (4 vCPU, 16 GB)  or  t3.large (8 GB Eco-Mode)
+#
+# ─────────────────────────────────────────────
+# FIRST TIME (or full rebuild):
+#   docker compose down --volumes --remove-orphans
+#   docker compose build --no-cache core-base dashboard-base
+#   docker compose build --no-cache core dashboard
+#   docker compose up
+#
+# DAILY (code changes only — fast):
+#   docker compose build core
+#   docker compose up
+#
+# DASHBOARD CHANGES ONLY:
+#   docker compose build dashboard
+#   docker compose up
+# ─────────────────────────────────────────────
+
+networks:
+  honeypot_net:
+    driver: bridge
+    name: honeypot_net
+
+services:
+
+  # ── CORE BASE (dependencies only) ─────────
+  core-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.core.base
+    image: honeypot-base:latest
+    profiles:
+      - base
+
+  # ── DASHBOARD BASE (dependencies only) ────
+  dashboard-base:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard.base
+    image: honeypot-dashboard-base:latest
+    profiles:
+      - base
+
+  # ── CORE API ──────────────────────────────
+  core:
+    build:
+      context: .
+      dockerfile: Dockerfile.core
+    image: honeypot-core:latest
+    container_name: honeypot_core
+    restart: unless-stopped
+    ports:
+      - "5001:5001"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./data/logs:/app/data/logs
+      - ./data/ml:/app/data/ml
+      # Docker socket — required for Start/Stop honeypot buttons
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - honeypot_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - DATA_DIR_HOST=${PWD}/data
+      - HF_HOME=/app/data/ml/huggingface
+      - OLLAMA_HOST=http://honeypot_ollama:11434
+    depends_on:
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5001/control/http/status"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 300s
+
+  # ── DASHBOARD ─────────────────────────────
+  dashboard:
+    build:
+      context: .
+      dockerfile: Dockerfile.dashboard
+    image: honeypot-dashboard:latest
+    container_name: honeypot_dashboard
+    restart: unless-stopped
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data/logs:/app/data/logs
+    networks:
+      - honeypot_net
+    environment:
+      - PYTHONUNBUFFERED=1
+      - CORE_API=http://honeypot_core:5001   # ✅ FIX (SERVICE NAME)
+    depends_on:
+      - core
+
+  # ── HTTP HONEYPOT IMAGE (pre-built, not auto-started) ──
+  honeypot_http_image:
+    build:
+      context: ./services/http
+      dockerfile: Dockerfile
+    image: honeypot_http_image
+    profiles:
+      - build_only
+
+  # ── SSH HONEYPOT IMAGE (pre-built, not auto-started) ──
+  honeypot_ssh_image:
+    build:
+      context: ./services/ssh
+      dockerfile: Dockerfile
+    image: honeypot_ssh_image
+    profiles:
+      - build_only
+
+  # ── CLOUDFLARE TUNNEL: HTTP TRAP ──────────────────
+  tunnel-http:
+    image: cloudflare/cloudflared:latest
+    container_name: tunnel_http
+    restart: unless-stopped
+    command: tunnel --url http://honeypot_http:8080 --no-autoupdate
+    networks:
+      - honeypot_net
+    depends_on:
+      - core
+
+  # ── CLOUDFLARE TUNNEL: DASHBOARD ───────────────────
+  tunnel-dash:
+    image: cloudflare/cloudflared:latest
+    container_name: tunnel_dash
+    restart: unless-stopped
+    command: tunnel --url http://honeypot_dashboard:8501 --no-autoupdate
+    networks:
+      - honeypot_net
+    depends_on:
+      - dashboard
+
+  # ── BORE TUNNEL: SSH TRAP ──────────────────────────
+  tunnel-ssh:
+    image: alpine:latest
+    container_name: tunnel_ssh
+    restart: unless-stopped
+    volumes:
+      - .:/app
+    working_dir: /app
+    entrypoint: /bin/sh -c "./bore local 2222 --to bore.pub --local-host honeypot_ssh"
+    networks:
+      - honeypot_net
+    depends_on:
+      - core
+
+  # ── OLLAMA (Local LLM — AI Maneuvering Engine) ───────
+  # Runs Phi-3-mini locally. No API keys required.
+  # Models are persisted in the named volume — NOT re-downloaded on every restart.
+  ollama:
+    image: ollama/ollama:latest
+    container_name: honeypot_ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    networks:
+      - honeypot_net
+    deploy:
+      resources:
+        limits:
+          memory: 4G   # Capped so it never consumes all RAM
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+volumes:
+  ollama_models:
+    driver: local

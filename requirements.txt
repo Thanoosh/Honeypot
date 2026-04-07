@@ -1,0 +1,14 @@
+flask
+requests
+scikit-learn
+numpy
+pandas
+pyyaml
+rich
+scipy
+joblib
+paramiko
+torch
+sentence-transformers
+ollama
+psutil
