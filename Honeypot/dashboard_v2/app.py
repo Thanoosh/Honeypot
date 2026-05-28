@@ -120,6 +120,15 @@ st.markdown("---")
 st.subheader("RAW EVENTS LOG (Filtered)")
 if not df.empty:
     st.dataframe(df.tail(50).iloc[::-1], use_container_width=True)
+    
+    # Add Export to CSV functionality
+    csv_data = df.to_csv(index=False).encode('utf-8')
+    st.download_button(
+        label="📥 Download Full Logs as CSV",
+        data=csv_data,
+        file_name='honeypot_events_log.csv',
+        mime='text/csv',
+    )
 else:
     st.info("Event log is empty.")
 
